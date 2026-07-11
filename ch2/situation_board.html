@@ -103,42 +103,69 @@
   .unit-percent { bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #495057; }
   .unit-badge { top: 10px; right: 0px; z-index: 4; }
 
-  /* 선(Divider) 도구 */
-  /*
-  .divider { width: 24px; height: 600px; display: flex; justify-content: center; align-items: center; }
-  .divider-line { border-left: 4px dashed #adb5bd; height: 50%; width: 0; pointer-events: none; }
-  .divider-horizontal { width: 1000px; height: 24px; display: flex; justify-content: center; align-items: center; }
-  .divider-line-h { border-top: 4px dashed #adb5bd; width: 100%; height: 0; pointer-events: none; }
-  */
-
   /* 드래그 가능한 모든 아이템 */
   .canvas-item { position: absolute !important; display: flex; align-items: center; justify-content: center; z-index: 1000; cursor: move; }
   
-  /* 선 도구 스타일 */
-  .divider { width: 24px; height: 200px; }
-  .divider-line { border-left: 4px dashed #adb5bd; height: 100%; pointer-events: none; }
-  .divider-horizontal { width: 200px; height: 24px; }
-  .divider-line-h { border-top: 4px dashed #adb5bd; width: 100%; pointer-events: none; }
-
-  /* 💡 X 모양 핸들 스타일 (마우스 오버 시 X 형태로 변경) */
-  .resize-handle {
-    position: absolute; width: 16px; height: 16px; display: none; z-index: 1001;
-    cursor: crosshair; background: transparent;
+  /* 마커(XXX) 영역 스타일 */
+  .resize-handle { 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    cursor: crosshair;
+    position: absolute;
+    padding: 5px; /* 마우스로 잡기 쉽도록 클릭 영역 확대 */
   }
-  .resize-handle::before, .resize-handle::after {
-    content: ''; position: absolute; width: 12px; height: 2px; background: #0d6efd;
-    top: 7px; left: 2px; transform: rotate(45deg);
-  }
-  .resize-handle::after { transform: rotate(-45deg); }
-  
-  /* hover 시에만 핸들 노출 */
-  .canvas-item:hover .resize-handle-top { display: block; cursor: ns-resize;}
-  .canvas-item:hover .resize-handle-bottom { display: block; cursor: ns-resize;}
-  .canvas-item:hover .resize-handle-left { display: block; cursor: ew-resize;}
-  .canvas-item:hover .resize-handle-right { display: block; cursor: ew-resize;}
 
-  .resize-handle-top { top: -8px; } .resize-handle-bottom { bottom: -8px; }
-  .resize-handle-left { left: -8px; } .resize-handle-right { right: -8px; }
+  /* 💡 디자인 반영: 이미지와 동일하게 두껍고 촘촘한 'X' 마커 */
+  .x-mark {
+    width: 14px;
+    height: 14px;
+    position: relative;
+    margin: -1.5px; /* X 마커들이 살짝 겹쳐져 연결된 쇠사슬 느낌 부여 */
+  }
+  .x-mark::before, .x-mark::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 3.5px; /* 두께감 증가 */
+    background: #888; /* 이미지와 유사한 짙은 회색 */
+    top: 5px;
+    left: -1px;
+    border-radius: 1px;
+  }
+  .x-mark::before { transform: rotate(45deg); }
+  .x-mark::after { transform: rotate(-45deg); }
+
+  /* --- 세로선 --- */
+  .divider { width: 30px; height: 250px; }
+  .divider-line {
+    border-left: 4px dashed #888;
+    height: 100%;
+    pointer-events: none;
+  }
+  .divider .resize-handle {
+    flex-direction: column; /* 세로선은 X 마커가 위아래로 정렬되도록 수정 */
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .divider .top { top: -30px; cursor: n-resize;}
+  .divider .bottom { bottom: -30px; cursor: n-resize;}
+
+  /* --- 가로선 --- */
+  .divider-horizontal { width: 250px; height: 30px; }
+  .divider-line-h {
+    border-top: 4px dashed #888;
+    width: 100%;
+    pointer-events: none;
+  }
+  .divider-horizontal .resize-handle {
+    flex-direction: row; /* 가로선은 X 마커가 좌우로 정렬되도록 수정 */
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .divider-horizontal .left { left: -30px; cursor: ew-resize;}
+  .divider-horizontal .right { right: -30px; cursor: ew-resize;}
   
   /* 색상 코드 */
   .c-pink { border: 2px solid #d63384; } .c-orange { border: 2px solid #fd7e14; }
@@ -233,19 +260,20 @@
     <div id="canvas-area">
       <div class="canvas-title" style="left: 180px; top: 30px;">X군 TROKA (40% <span class="badge bg-b">B</span>)</div>
       <div class="canvas-title" style="left: 780px; top: 30px;">X군 FROKA (75% <span class="badge bg-a">A</span>)</div>
-      
-	  <div class="canvas-item divider" style="left: 100px; top: 100px;">
-		<div class="resize-handle resize-handle-top"></div>
-		<div class="divider-line"></div>
-		<div class="resize-handle resize-handle-bottom"></div>
-	  </div>
-  
-	  <div class="canvas-item divider-horizontal" style="left: 300px; top: 100px;">
-		<div class="resize-handle resize-handle-left"></div>
-		<div class="divider-line-h"></div>
-		<div class="resize-handle resize-handle-right"></div>
-	  </div>
-	  
+
+
+      <div class="canvas-item divider" style="left: 400px; top: 150px;">
+        <div class="resize-handle top"><div class="x-mark"></div><div class="x-mark"></div></div>
+        <div class="divider-line"></div>
+        <div class="resize-handle bottom"><div class="x-mark"></div><div class="x-mark"></div></div>
+      </div>
+    
+      <div class="canvas-item divider-horizontal" style="left: 100px; top: 150px;">
+        <div class="resize-handle left"><div class="x-mark"></div><div class="x-mark"></div></div>
+        <div class="divider-line-h"></div>
+        <div class="resize-handle right"><div class="x-mark"></div><div class="x-mark"></div></div>
+      </div>
+    
     </div>
   </div>
 </div>
@@ -266,166 +294,194 @@
 
 <script>
   
-  document.addEventListener('DOMContentLoaded', () => {
+  /* --- 1. 사이드바 및 팝업 동작 스크립트 --- */
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('btn-sidebar-toggle');
+  const newUnitsArea = document.getElementById('new-units-area');
+  
+  toggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('closed');
+    toggleBtn.innerHTML = sidebar.classList.contains('closed') ? '▶' : '◀';
+  });
 
-    /* --- 1. 사이드바 및 팝업 동작 스크립트 --- */
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('btn-sidebar-toggle');
-    const newUnitsArea = document.getElementById('new-units-area');
+  // 군대부호 목록
+  const availableUnits = [
+    { id: 'u1', name: '제9보병사단', size: 'XX', unitId: '9', type: 'infantry', badge: 'G', percent: '95%', border: '' },
+    { id: 'u2', name: '제15기갑여단', size: 'X', unitId: '15', type: 'armor', badge: 'A', percent: '80%', border: 'c-red-dash' },
+    { id: 'u3', name: '제3해상함대', size: 'XX', unitId: '3', type: 'ship', badge: 'G', percent: '100%', border: 'c-blue' },
+    { id: 'u4', name: '제1전투비행단', size: 'X', unitId: '1', type: 'plane', badge: 'R', percent: '60%', border: 'c-orange' },
+    { id: 'u5', name: '제8기동사단', size: 'XX', unitId: '8', type: 'armor', badge: 'B', percent: '40%', border: '' },
+    { id: 'u6', name: '제11기동사단', size: 'XX', unitId: '11', type: 'armor', badge: 'G', percent: '100%', border: 'c-pink' },
+    { id: 'u7', name: '제7보병사단', size: 'XX', unitId: '7', type: 'infantry', badge: 'B', percent: '30%', border: '' },
+    { id: 'u8', name: '제5기갑사단', size: 'XX', unitId: '5', type: 'armor', badge: 'R', percent: '60%', border: 'c-blue' }
+  ];
+
+  const modal = document.getElementById('add-unit-modal');
+  const modalList = document.getElementById('modal-unit-list');
+
+  // 군대부호 생성
+  function generateUnitHTML(data) {
+    let symbolHTML = '';
+    if(data.type === 'infantry' || data.type === 'armor') symbolHTML = `<div class="unit-symbol ${data.type}"></div>`;
+    else if (data.type === 'ship') symbolHTML = `<div class="unit-symbol custom-icon"><svg width="24" height="16" viewBox="0 0 24 16"><path d="M2 10 L22 10 L18 16 L6 16 Z M6 10 L8 4 L16 4 L18 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`;
+    else if (data.type === 'plane') symbolHTML = `<div class="unit-symbol custom-icon"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2 L14 10 L22 14 L22 16 L14 16 L12 22 L10 16 L2 16 L2 14 L10 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`;
+    let badgeClass = data.badge.toLowerCase();
+    let borderHTML = data.border ? `<div class="unit-circle ${data.border}"></div>` : '';
+    return `
+      <div class="unit-wrapper">
+        ${borderHTML}
+        <div class="unit-size">${data.size}</div>
+        <div class="unit-id">${data.unitId}</div>
+        ${symbolHTML}
+        <div class="badge bg-${badgeClass} unit-badge">${data.badge}</div>
+        <div class="unit-percent">${data.percent}</div>
+      </div>`;
+  }
+
+  // 군대부호 팝업
+  document.getElementById('btn-open-modal').addEventListener('click', () => {
+    modalList.innerHTML = availableUnits.map(unit => `
+      <label class="list-item">
+        <input type="checkbox" class="unit-checkbox" value="${unit.id}">
+        <div class="list-info"><div class="list-name">${unit.name}</div><div class="list-desc">규모: ${unit.size} / 식별: ${unit.unitId} / 전투력: ${unit.percent}</div></div>
+        <div class="preview-wrap">${generateUnitHTML(unit)}</div>
+      </label>
+    `).join('');
+    modal.classList.add('active');
+  });
+
+  // 군대부호팝업 닫기
+  const closeModal = () => modal.classList.remove('active');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  
+  // 군대부호팝업에서 군대부호 추가
+  document.getElementById('btn-apply-add').addEventListener('click', () => {
+    const checkedBoxes = document.querySelectorAll('.unit-checkbox:checked');
+    if(checkedBoxes.length === 0) { alert("추가할 부대를 하나 이상 선택해주세요."); return; }
     
-    toggleBtn.addEventListener('click', () => {
-      sidebar.classList.toggle('closed');
-      toggleBtn.innerHTML = sidebar.classList.contains('closed') ? '▶' : '◀';
-    });
-
-    // 군대부호 목록
-    const availableUnits = [
-      { id: 'u1', name: '제9보병사단', size: 'XX', unitId: '9', type: 'infantry', badge: 'G', percent: '95%', border: '' },
-      { id: 'u2', name: '제15기갑여단', size: 'X', unitId: '15', type: 'armor', badge: 'A', percent: '80%', border: 'c-red-dash' },
-      { id: 'u3', name: '제3해상함대', size: 'XX', unitId: '3', type: 'ship', badge: 'G', percent: '100%', border: 'c-blue' },
-      { id: 'u4', name: '제1전투비행단', size: 'X', unitId: '1', type: 'plane', badge: 'R', percent: '60%', border: 'c-orange' },
-      { id: 'u5', name: '제8기동사단', size: 'XX', unitId: '8', type: 'armor', badge: 'B', percent: '40%', border: '' },
-      { id: 'u6', name: '제11기동사단', size: 'XX', unitId: '11', type: 'armor', badge: 'G', percent: '100%', border: 'c-pink' },
-      { id: 'u7', name: '제7보병사단', size: 'XX', unitId: '7', type: 'infantry', badge: 'B', percent: '30%', border: '' },
-      { id: 'u8', name: '제5기갑사단', size: 'XX', unitId: '5', type: 'armor', badge: 'R', percent: '60%', border: 'c-blue' }
-    ];
-
-    const modal = document.getElementById('add-unit-modal');
-    const modalList = document.getElementById('modal-unit-list');
-
-    // 군대부호 생성
-    function generateUnitHTML(data) {
-      let symbolHTML = '';
-      if(data.type === 'infantry' || data.type === 'armor') symbolHTML = `<div class="unit-symbol ${data.type}"></div>`;
-      else if (data.type === 'ship') symbolHTML = `<div class="unit-symbol custom-icon"><svg width="24" height="16" viewBox="0 0 24 16"><path d="M2 10 L22 10 L18 16 L6 16 Z M6 10 L8 4 L16 4 L18 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`;
-      else if (data.type === 'plane') symbolHTML = `<div class="unit-symbol custom-icon"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2 L14 10 L22 14 L22 16 L14 16 L12 22 L10 16 L2 16 L2 14 L10 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`;
-      let badgeClass = data.badge.toLowerCase();
-      let borderHTML = data.border ? `<div class="unit-circle ${data.border}"></div>` : '';
-      return `
-        <div class="unit-wrapper">
-          ${borderHTML}
-          <div class="unit-size">${data.size}</div>
-          <div class="unit-id">${data.unitId}</div>
-          ${symbolHTML}
-          <div class="badge bg-${badgeClass} unit-badge">${data.badge}</div>
-          <div class="unit-percent">${data.percent}</div>
-        </div>`;
-    }
-
-
-    // 군대부호 팝업
-    document.getElementById('btn-open-modal').addEventListener('click', () => {
-      modalList.innerHTML = availableUnits.map(unit => `
-        <label class="list-item">
-          <input type="checkbox" class="unit-checkbox" value="${unit.id}">
-          <div class="list-info"><div class="list-name">${unit.name}</div><div class="list-desc">규모: ${unit.size} / 식별: ${unit.unitId} / 전투력: ${unit.percent}</div></div>
-          <div class="preview-wrap">${generateUnitHTML(unit)}</div>
-        </label>
-      `).join('');
-      modal.classList.add('active');
-    });
-
-    // 군대부호팝업 닫기
-    const closeModal = () => modal.classList.remove('active');
-    document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-    document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-    
-    // 군대부호팝업에서 군대부호 추가
-    document.getElementById('btn-apply-add').addEventListener('click', () => {
-      const checkedBoxes = document.querySelectorAll('.unit-checkbox:checked');
-      if(checkedBoxes.length === 0) { alert("추가할 부대를 하나 이상 선택해주세요."); return; }
-      
-      checkedBoxes.forEach(cb => {
-        // 선택된 군대부호를  
-        const unitData = availableUnits.find(u => u.id === cb.value);
-        if (unitData) {
-          newUnitsArea.insertAdjacentHTML('beforeend', generateUnitHTML(unitData));
-        }
-      });
-
-      if (sidebar.classList.contains('closed')) {
-        sidebar.classList.remove('closed');
-        toggleBtn.innerHTML = '◀';
+    checkedBoxes.forEach(cb => {
+      // 선택된 군대부호를  
+      const unitData = availableUnits.find(u => u.id === cb.value);
+      if (unitData) {
+        newUnitsArea.insertAdjacentHTML('beforeend', generateUnitHTML(unitData));
       }
-      closeModal();
     });
 
-
-    /* --- 2. 자유 배치 캔버스 마스터 로직 --- */
-    
-    // 💡 두 요소의 면적이 겹치는지(AABB 충돌) 확인하는 헬퍼 함수
-    function isOverlapping(rect1, rect2) {
-      return !(rect1.right < rect2.left || 
-               rect1.left > rect2.right || 
-               rect1.bottom < rect2.top || 
-               rect1.top > rect2.bottom);
+    if (sidebar.classList.contains('closed')) {
+      sidebar.classList.remove('closed');
+      toggleBtn.innerHTML = '◀';
     }
+    closeModal();
+  });
 
-    let zCounters = { box: 100, unit: 2000, line: 3000 };
-    let isDragging = false;
-    let currentDrag = null; 
-    let dragClone = null;   
-    let dragType = null;    
-    let isTool = false; 
-    let offsetX, offsetY;
-    let dragCategory = null;
-    
-    // 복구용 원본 위치 저장 변수
-    let originalParent = null;
-    let originalLeft = '';
-    let originalTop = '';
-
-	  // 선늘리기 줄이기
-	  let isResizing = false
-	  let activeHandle = null, targetItem = null;
-	  let startX, startY, startW, startH, startTop, startLeft;
-    
-    const canvasArea = document.getElementById('canvas-area');
-	  const trashCan = document.getElementById('trash-can');
-
+  document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('mousedown', function(e) {
+      mouseDown(e);
+    });
+  });
 
+  /* --- 2. 자유 배치 캔버스 마스터 로직 --- */
+    
+  // 💡 두 요소의 면적이 겹치는지(AABB 충돌) 확인하는 헬퍼 함수
+  function isOverlapping(rect1, rect2) {
+    return !(rect1.right < rect2.left || 
+              rect1.left > rect2.right || 
+              rect1.bottom < rect2.top || 
+              rect1.top > rect2.bottom);
+  }
+
+  let zCounters = { box: 100, unit: 2000, line: 3000 };
+  let isDragging = false;
+  let currentDrag = null; 
+  let dragClone = null;   
+  let dragType = null;    
+  let isTool = false; 
+  let offsetX, offsetY;
+  let dragCategory = null;
+  
+  // 복구용 원본 위치 저장 변수
+  let originalParent = null;
+  let originalLeft = '';
+  let originalTop = '';
+
+  // 선 늘리기/줄이기 관련 변수 (통합됨)
+  let isResizing = false;
+  let activeHandle = null, targetItem = null;
+  let startX, startY, startW, startH, startTop, startLeft;
+  
+  const canvasArea = document.getElementById('canvas-area');
+  const trashCan = document.getElementById('trash-can');
+
+  function mouseDown(e) {
       // 왼쪽마우스 클릭여부 체크
       if (e.button !== 0) return;
       // 군대부호팝업 || 상단바 클릭여부 체크
       if (e.target.closest('.modal-overlay') || e.target.closest('.top-controls')) return; 
 
-      // 좌측툴바
+      // -------------------------------------------------------------
+      // 💡 [핵심] 1. 선 늘리기/줄이기 (Resize Handle) 클릭 감지 최우선 처리
+      // -------------------------------------------------------------
+      let handle = e.target.closest('.resize-handle');
+      if (handle) {
+        isResizing = true;
+        activeHandle = handle;
+        targetItem = handle.closest('.canvas-item');
+        
+        startX = e.clientX; 
+        startY = e.clientY;
+        startW = targetItem.offsetWidth; 
+        startH = targetItem.offsetHeight;
+        startTop = targetItem.offsetTop; 
+        startLeft = targetItem.offsetLeft;
+        
+        targetItem.style.zIndex = 999999;
+        
+        // 이벤트 버블링 차단하여 드래그 로직이 겹쳐서 실행되지 않도록 방지
+        e.stopPropagation(); 
+        e.preventDefault();
+
+        // 리사이즈 전용 이벤트 리스너 등록
+        document.addEventListener('mousemove', onResizeMove);
+        document.addEventListener('mouseup', onResizeUp);
+        
+        return; // 리사이즈 로직이 실행되면, 하단의 드래그 로직은 무시하고 함수 종료
+      }
+
+      // -------------------------------------------------------------
+      // 💡 2. 기존 드래그 앤 드롭 객체 감지 및 실행
+      // -------------------------------------------------------------
       let tool = e.target.closest('.toolbox-item');
-      // 가로선/세로선
-      let divider = e.target.closest('.divider, .divider-horizontal');
-      // 군대부호
+      let divider = e.target.closest('.divider, .divider-horizontal'); // 캔버스 위의 선도 잡히도록 수정
       let unit = e.target.closest('.unit-wrapper');
-      // 군단박스
       let box = e.target.closest('.corps-box');
-      // 휴지통
       let trash = e.target.closest('.trash-can');
 
       // 휴지통 클릭여부 체크
       if (trash) return; 
 
       if (tool) {
-        // 툴 클릭일 경우
+        // 툴바 클릭일 경우
         dragType = tool.dataset.type; 
         currentDrag = tool; 
         isTool = true; 
-      } else if (divider) {
-        // 가로선 or 세로선 클릭일 경우
-        dragType = divider.classList.contains('divider-horizontal') ? 'divider-h' : 'divider'; 
-        currentDrag = divider; 
-        isTool = false; 
       } else if (unit) { 
-        // 군대부호 클릭일 경우
+        // 캔버스 위의 군대부호
         dragType = 'unit'; 
         currentDrag = unit; 
         isTool = false; 
       } else if (box) { 
-        // 군박스 클릭일 경우
+        // 캔버스 위의 군박스
         dragType = 'box'; 
         currentDrag = box; 
         isTool = false; 
+      } else if (divider) { 
+        // 캔버스 위의 가로선/세로선 (선 본체를 잡았을 경우 이동)
+        dragType = 'line';
+        currentDrag = divider;
+        isTool = false;
       } else { 
-        // 그외 클릭일경우
+        // 그외 빈공간 클릭일경우
         return; 
       } 
 
@@ -443,34 +499,26 @@
       if (isTool) {
         // 클릭이 tool일 경우
         dragClone = document.createElement('div');
-        // 대상 class 설정
         dragClone.className = 'canvas-item ' + (dragType === 'tool-box' ? 'corps-box' : dragType === 'tool-divider' ? 'divider' : 'divider-horizontal');
         
         if (dragType === 'tool-box') {
-          // 군단박스
           dragClone.innerHTML = '<div class="corps-header-box">New Corps</div><div class="corps-header-box" style="margin-top:5px;">0% <span class="badge bg-b">B</span></div>';
         } else if (dragType === 'tool-divider') {
-          // 가로선
-          dragClone.innerHTML = '<div class="resize-handle resize-handle-top"></div><div class="divider-line"></div><div class="resize-handle resize-handle-bottom"></div>';
+          dragClone.innerHTML = '<div class="resize-handle top"><div class="x-mark"></div><div class="x-mark"></div></div><div class="divider-line"></div><div class="resize-handle bottom"><div class="x-mark"></div><div class="x-mark"></div></div>';
         } else if (dragType === 'tool-divider-h') {
-          // 세로선
-          dragClone.innerHTML = '<div class="resize-handle resize-handle-left"></div><div class="divider-line-h"></div><div class="resize-handle resize-handle-right"></div>';
+          dragClone.innerHTML = '<div class="resize-handle left"><div class="x-mark"></div><div class="x-mark"></div></div><div class="divider-line-h"></div><div class="resize-handle right"><div class="x-mark"></div><div class="x-mark"></div></div>';
         }
-        // 대상 마우스 클릭 위치 고정
+        
         dragClone.style.position = 'fixed';
-        // 대상 숨기기
         dragClone.style.visibility = 'hidden';
-        // 대상 추가
         document.body.appendChild(dragClone);
-        // 대상 화면속성(뷰포트)정보
         const cloneRect = dragClone.getBoundingClientRect();
         offsetX = cloneRect.width / 2;
         offsetY = cloneRect.height / 2;
-        // 대상 보이기
         dragClone.style.visibility = 'visible';
         
       } else {
-        // 클릭이 tool이 아니고 캔버스일 경우
+        // 클릭이 캔버스 위의 아이템일 경우
         dragClone = currentDrag;
         originalParent = currentDrag.parentNode;
         originalLeft = currentDrag.style.left;
@@ -479,161 +527,160 @@
         const rect = currentDrag.getBoundingClientRect();
         offsetX = e.clientX - rect.left;
         offsetY = e.clientY - rect.top;
-        // 대상 마우스 클릭 위치 고정
+        
         dragClone.style.position = 'fixed';
         dragClone.style.left = rect.left + 'px';
         dragClone.style.top = rect.top + 'px';
         document.body.appendChild(dragClone);
       }
-	  
-	    // 1. 핸들 클릭시 리사이즈 모드 (길이 조절)
-      if (e.target.classList.contains('resize-handle')) {
-        isResizing = true;
-        activeHandle = e.target;
-        targetItem = e.target.parentElement;
-        startX = e.clientX; startY = e.clientY;
-        startW = targetItem.offsetWidth; startH = targetItem.offsetHeight;
-        startTop = targetItem.offsetTop; startLeft = targetItem.offsetLeft;
-        e.stopPropagation(); 
-        e.preventDefault();
-      } 
-      // 2. 선 본체 클릭시 드래그 모드 (위치 이동)
-      else if (e.target.closest('.canvas-item')) {
-        isDragging = true;
-        targetItem = e.target.closest('.canvas-item');
-        startX = e.clientX - targetItem.offsetLeft;
-        startY = e.clientY - targetItem.offsetTop;
-        e.preventDefault();
-      }
-	
-
-      // 💡 [핵심] 마우스를 쥐고 이동(Drag)하는 동안은 사이드바 위로 보이도록 무조건 최상단 Z-Index 부여
+    
+      // 드래그 중인 요소를 최상단으로 올림
       dragClone.style.zIndex = 999999;
       dragClone.style.pointerEvents = 'none'; 
       dragClone.style.margin = '0';
       if (!isTool) currentDrag.style.opacity = '0.7';
 
-      moveAt(e.clientX, e.clientY);
-
-      function moveAt(clientX, clientY) {
-		    if(isResizing)return;
-          dragClone.style.left = (clientX - offsetX) + 'px';
-          dragClone.style.top = (clientY - offsetY) + 'px';
-      }
-
-
-      function onMouseMove(e) {
-        if (!isDragging) return;
-        moveAt(e.clientX, e.clientY);
-
-        // 💡 [핵심] 면적 충돌(AABB)을 이용한 휴지통 활성화 감지
-        const dragRect = dragClone.getBoundingClientRect();
-        const trashRect = trashCan.getBoundingClientRect();
-
-        if (isOverlapping(dragRect, trashRect)) {
-          trashCan.classList.add('drag-over-trash');
-        } else {
-          trashCan.classList.remove('drag-over-trash');
-        }
-		
-
-
-        if (isResizing) {
-          if (targetItem.classList.contains('divider')) { // 세로선 길이
-          if (activeHandle.classList.contains('resize-handle-bottom')) targetItem.style.height = (startH + (e.clientY - startY)) + 'px';
-          else if (activeHandle.classList.contains('resize-handle-top')) {
-            targetItem.style.height = (startH - (e.clientY - startY)) + 'px';
-            targetItem.style.top = (startTop + (e.clientY - startY)) + 'px';
-          }
-          } else { // 가로선 길이
-          if (activeHandle.classList.contains('resize-handle-right')) targetItem.style.width = (startW + (e.clientX - startX)) + 'px';
-          else if (activeHandle.classList.contains('resize-handle-left')) {
-            targetItem.style.width = (startW - (e.clientX - startX)) + 'px';
-            targetItem.style.left = (startLeft + (e.clientX - startX)) + 'px';
-          }
-          }
-        }
-      }
-
-      function onMouseUp(e) {
-        if (!isDragging) return;
-        isDragging = false;
-        isResizing = false;
-        activeHandle = null; 
-        targetItem = null;
-	
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-
-        dragClone.style.pointerEvents = 'auto'; 
-        
-        const dragRect = dragClone.getBoundingClientRect();
-        const trashRect = trashCan.getBoundingClientRect();
-        const canvasRect = canvasArea.getBoundingClientRect();
-
-		    // 휴지통 충돌체크
-        let isOverTrash = isOverlapping(dragRect, trashRect);
-		
-        // 💡 [핵심] 마우스 드래그 Rect가 캔버스 영역(작전도)을 벗어낫는지 판별
-        let isOutsideCanvas = (
-          dragRect.left < canvasRect.left || dragRect.right > canvasRect.right ||
-          dragRect.top < canvasRect.top || dragRect.bottom > canvasRect.bottom
-        );
-        
-        // 1순위: 🗑️ 휴지통 드롭 시 삭제
-        if (isOverTrash) {
-          dragClone.remove();
-          trashCan.classList.remove('drag-over-trash');
-        } 
-        // 2순위: 캔버스 밖(사이드바, 배경 등)에 놓았을 경우 자동 취소(복구)
-        else if (isOutsideCanvas) {
-          if (isTool) {
-            dragClone.remove(); // 도구상자에서 갓 꺼낸 아이템이면 바로 삭제
-          } else {
-            // 원래 있던 장소가 사이드바(대기 부대)인 경우
-            if (originalParent && originalParent.id === 'new-units-area') {
-              dragClone.style.position = 'relative';
-              dragClone.style.left = '';
-              dragClone.style.top = '';
-              dragClone.style.zIndex = '';
-              dragClone.classList.remove('canvas-item');
-              originalParent.appendChild(dragClone);
-            } else {
-              // 캔버스 안에 있던 녀석이면 원래 위치로 복귀
-              dragClone.style.position = 'absolute';
-              dragClone.style.left = originalLeft;
-              dragClone.style.top = originalTop;
-              dragClone.style.zIndex = zCounters[dragCategory];
-              canvasArea.appendChild(dragClone);
-            }
-          }
-        }
-        // 3순위: 📝 캔버스 내부에 정상적으로 드롭 시 안착
-        else {
-          let newLeft = dragRect.left - canvasRect.left + canvasArea.scrollLeft;
-          let newTop = dragRect.top - canvasRect.top + canvasArea.scrollTop;
-
-          dragClone.style.position = 'absolute';
-          dragClone.style.left = newLeft + 'px';
-          dragClone.style.top = newTop + 'px';
-          
-          // 캔버스에 놓은 후에는 본인의 올바른 계층(Z-Index)으로 복원
-          dragClone.style.zIndex = zCounters[dragCategory];
-          
-          if (dragClone.parentNode !== canvasArea) {
-            dragClone.classList.add('canvas-item');
-            canvasArea.appendChild(dragClone);
-          }
-        }
-
-        if (currentDrag) currentDrag.style.opacity = '1';
-        currentDrag = null; dragClone = null; dragType = null; dragCategory = null; originalParent = null;
-      }
-
       document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    });
-  });
+      document.addEventListener('mouseup', onMouseUp);   
+  }
+
+  // -------------------------------------------------------------
+  // 💡 리사이즈(선 늘리기/줄이기) 전용 함수 (통합)
+  // -------------------------------------------------------------
+  function onResizeMove(e) {
+    if (!isResizing || !targetItem) return;
+    
+    const MIN_SIZE = 80; // 선이 반전되거나 완전히 사라지는 것을 막기 위한 최소 길이
+    
+    if (targetItem.classList.contains('divider')) {
+      // [세로선] 위/아래 크기 조절
+      if (activeHandle.classList.contains('bottom')) {
+        let newHeight = startH + (e.clientY - startY);
+        targetItem.style.height = Math.max(MIN_SIZE, newHeight) + 'px';
+      } else if (activeHandle.classList.contains('top')) {
+        let deltaY = e.clientY - startY;
+        let newHeight = startH - deltaY;
+        if (newHeight >= MIN_SIZE) {
+          targetItem.style.height = newHeight + 'px';
+          targetItem.style.top = (startTop + deltaY) + 'px';
+        }
+      }
+    } else if (targetItem.classList.contains('divider-horizontal')) {
+      // [가로선] 좌/우 크기 조절
+      if (activeHandle.classList.contains('right')) {
+        let newWidth = startW + (e.clientX - startX);
+        targetItem.style.width = Math.max(MIN_SIZE, newWidth) + 'px';
+      } else if (activeHandle.classList.contains('left')) {
+        let deltaX = e.clientX - startX;
+        let newWidth = startW - deltaX;
+        if (newWidth >= MIN_SIZE) {
+          targetItem.style.width = newWidth + 'px';
+          targetItem.style.left = (startLeft + deltaX) + 'px';
+        }
+      }
+    }
+  }
+
+  function onResizeUp(e) {
+    if (!isResizing) return;
+    isResizing = false;
+    
+    if (targetItem) targetItem.style.zIndex = zCounters['line'] || 3000; // 계층 원상 복구
+    activeHandle = null; 
+    targetItem = null;
+    
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeUp);
+  }
+
+  // -------------------------------------------------------------
+  // 💡 기존 드래그 앤 드롭 전용 함수
+  // -------------------------------------------------------------
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    moveAt(e.clientX, e.clientY);
+
+    // 면적 충돌(AABB)을 이용한 휴지통 활성화 감지
+    const dragRect = dragClone.getBoundingClientRect();
+    const trashRect = trashCan.getBoundingClientRect();
+
+    if (isOverlapping(dragRect, trashRect)) {
+      trashCan.classList.add('drag-over-trash');
+    } else {
+      trashCan.classList.remove('drag-over-trash');
+    }
+  }
+
+  function moveAt(clientX, clientY) {
+    dragClone.style.left = (clientX - offsetX) + 'px';
+    dragClone.style.top = (clientY - offsetY) + 'px';
+  }
+
+  function onMouseUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+
+    dragClone.style.pointerEvents = 'auto'; 
+    
+    const dragRect = dragClone.getBoundingClientRect();
+    const trashRect = trashCan.getBoundingClientRect();
+    const canvasRect = canvasArea.getBoundingClientRect();
+
+    let isOverTrash = isOverlapping(dragRect, trashRect);
+    let isOutsideCanvas = (
+      dragRect.left < canvasRect.left || dragRect.right > canvasRect.right ||
+      dragRect.top < canvasRect.top || dragRect.bottom > canvasRect.bottom
+    );
+    
+    // 1순위: 🗑️ 휴지통 드롭 시 삭제
+    if (isOverTrash) {
+      dragClone.remove();
+      trashCan.classList.remove('drag-over-trash');
+    } 
+    // 2순위: 캔버스 밖(사이드바, 배경 등)에 놓았을 경우 자동 취소(복구)
+    else if (isOutsideCanvas) {
+      if (isTool) {
+        dragClone.remove(); 
+      } else {
+        if (originalParent && originalParent.id === 'new-units-area') {
+          dragClone.style.position = 'relative';
+          dragClone.style.left = '';
+          dragClone.style.top = '';
+          dragClone.style.zIndex = '';
+          dragClone.classList.remove('canvas-item');
+          originalParent.appendChild(dragClone);
+        } else {
+          dragClone.style.position = 'absolute';
+          dragClone.style.left = originalLeft;
+          dragClone.style.top = originalTop;
+          dragClone.style.zIndex = zCounters[dragCategory];
+          canvasArea.appendChild(dragClone);
+        }
+      }
+    }
+    // 3순위: 📝 캔버스 내부에 정상적으로 드롭 시 안착
+    else {
+      let newLeft = dragRect.left - canvasRect.left + canvasArea.scrollLeft;
+      let newTop = dragRect.top - canvasRect.top + canvasArea.scrollTop;
+
+      dragClone.style.position = 'absolute';
+      dragClone.style.left = newLeft + 'px';
+      dragClone.style.top = newTop + 'px';
+      dragClone.style.zIndex = zCounters[dragCategory];
+      
+      if (dragClone.parentNode !== canvasArea) {
+        dragClone.classList.add('canvas-item');
+        canvasArea.appendChild(dragClone);
+      }
+    }
+
+    if (currentDrag) currentDrag.style.opacity = '1';
+    currentDrag = null; dragClone = null; dragType = null; dragCategory = null; originalParent = null;
+  }
+
 </script>
 
 </body>
