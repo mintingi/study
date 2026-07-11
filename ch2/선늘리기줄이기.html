@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>군 작전 상황도 - 최종 통합 마스터본</title>
+<style>
+  body {
+    font-family: 'Malgun Gothic', sans-serif;
+    background-color: #ffffff;
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  #canvas-area {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+  
+  .canvas-item {
+    position: absolute !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    cursor: move;
+  }
+  
+  /* 마커(XXX) 영역 스타일 */
+  .resize-handle { 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    cursor: crosshair;
+    position: absolute;
+    padding: 5px; /* 마우스로 잡기 쉽도록 클릭 영역 확대 */
+  }
+
+  /* 💡 디자인 반영: 이미지와 동일하게 두껍고 촘촘한 'X' 마커 */
+  .x-mark {
+    width: 14px;
+    height: 14px;
+    position: relative;
+    margin: -1.5px; /* X 마커들이 살짝 겹쳐져 연결된 쇠사슬 느낌 부여 */
+  }
+  .x-mark::before, .x-mark::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 3.5px; /* 두께감 증가 */
+    background: #888; /* 이미지와 유사한 짙은 회색 */
+    top: 5px;
+    left: -1px;
+    border-radius: 1px;
+  }
+  .x-mark::before { transform: rotate(45deg); }
+  .x-mark::after { transform: rotate(-45deg); }
+
+  /* --- 세로선 --- */
+  .divider { width: 30px; height: 250px; }
+  .divider-line {
+    border-left: 4px dashed #888;
+    height: 100%;
+    pointer-events: none;
+  }
+  .divider .resize-handle {
+    flex-direction: column; /* 세로선은 X 마커가 위아래로 정렬되도록 수정 */
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .divider .top { top: -45px; cursor: n-resize;}
+  .divider .bottom { bottom: -45px; cursor: n-resize;}
+
+  /* --- 가로선 --- */
+  .divider-horizontal { width: 250px; height: 30px; }
+  .divider-line-h {
+    border-top: 4px dashed #888;
+    width: 100%;
+    pointer-events: none;
+  }
+  .divider-horizontal .resize-handle {
+    flex-direction: row; /* 가로선은 X 마커가 좌우로 정렬되도록 수정 */
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .divider-horizontal .left { left: -45px; cursor: ew-resize;}
+  .divider-horizontal .right { right: -45px; cursor: ew-resize;}
+</style>
+</head>
+<body>
+
+<div id="canvas-area">
+  <div class="canvas-item divider" style="left: 400px; top: 150px;">
+    <div class="resize-handle top"><div class="x-mark"></div><div class="x-mark"></div></div>
+    <div class="divider-line"></div>
+    <div class="resize-handle bottom"><div class="x-mark"></div><div class="x-mark"></div></div>
+  </div>
+  
+  <div class="canvas-item divider-horizontal" style="left: 100px; top: 150px;">
+    <div class="resize-handle left"><div class="x-mark"></div><div class="x-mark"></div></div>
+    <div class="divider-line-h"></div>
+    <div class="resize-handle right"><div class="x-mark"></div><div class="x-mark"></div></div>
+  </div>
+</div>
+
+<script>
+  let isResizing = false, isDragging = false;
+  let activeHandle = null, targetItem = null;
+  let startX, startY, startW, startH, startTop, startLeft;
+
+  function lineResizeHandleMouseDown(e) {
+    // 1. 끝단(XXX) 마커 클릭 시 -> 사이즈 조절(Resize)
+    if (e.target.closest('.resize-handle')) {
+      isResizing = true;
+      activeHandle = e.target.closest('.resize-handle');
+      targetItem = activeHandle.closest('.canvas-item');
+      
+      startX = e.clientX; 
+      startY = e.clientY;
+      startW = targetItem.offsetWidth; 
+      startH = targetItem.offsetHeight;
+      startTop = targetItem.offsetTop; 
+      startLeft = targetItem.offsetLeft;
+      
+      targetItem.style.zIndex = 999999; // 현재 제어 중인 객체를 최상단으로
+      e.stopPropagation(); 
+      e.preventDefault();
+    } 
+    // 2. 점선 본체 클릭 시 -> 이동(Drag)
+    else if (e.target.closest('.canvas-item')) {
+      isDragging = true;
+      targetItem = e.target.closest('.canvas-item');
+      
+      // 객체 내 클릭 위치 오프셋 계산
+      startX = e.clientX - targetItem.offsetLeft;
+      startY = e.clientY - targetItem.offsetTop;
+      
+      targetItem.style.zIndex = 999999;
+    }
+  }
+
+  function lineResizeHandleMouseMove(e) {
+    if (isResizing && targetItem) {
+      const MIN_SIZE = 80; // 선이 반전되거나 완전히 사라지는 것을 막기 위한 최소 길이
+      
+      if (targetItem.classList.contains('divider')) {
+        // [세로선] 위/아래 크기 조절 로직
+        if (activeHandle.classList.contains('bottom')) {
+          let newHeight = startH + (e.clientY - startY);
+          targetItem.style.height = Math.max(MIN_SIZE, newHeight) + 'px';
+        } 
+        else if (activeHandle.classList.contains('top')) {
+          let deltaY = e.clientY - startY;
+          let newHeight = startH - deltaY;
+          if (newHeight >= MIN_SIZE) {
+            targetItem.style.height = newHeight + 'px';
+            targetItem.style.top = (startTop + deltaY) + 'px';
+          }
+        }
+      } else if (targetItem.classList.contains('divider-horizontal')) {
+        // [가로선] 좌/우 크기 조절 로직
+        if (activeHandle.classList.contains('right')) {
+          let newWidth = startW + (e.clientX - startX);
+          targetItem.style.width = Math.max(MIN_SIZE, newWidth) + 'px';
+        } 
+        else if (activeHandle.classList.contains('left')) {
+          let deltaX = e.clientX - startX;
+          let newWidth = startW - deltaX;
+          if (newWidth >= MIN_SIZE) {
+            targetItem.style.width = newWidth + 'px';
+            targetItem.style.left = (startLeft + deltaX) + 'px';
+          }
+        }
+      }
+    } else if (isDragging && targetItem) {
+      // 본체 드래그 이동 로직
+      targetItem.style.left = (e.clientX - startX) + 'px';
+      targetItem.style.top = (e.clientY - startY) + 'px';
+    }
+  }  
+  
+  function init() {
+    if (targetItem) targetItem.style.zIndex = 1000; // z-index 원복
+    isResizing = false; 
+    isDragging = false;
+    activeHandle = null; 
+    targetItem = null; 
+  }
+  
+  document.addEventListener('mousedown', (e) => {
+	lineResizeHandleMouseDown(e);
+  });
+
+  document.addEventListener('mousemove', (e) => {
+	lineResizeHandleMouseMove(e);
+  });
+
+  document.addEventListener('mouseup', () => {
+	init();
+  });
+</script>
+</body>
+</html>
