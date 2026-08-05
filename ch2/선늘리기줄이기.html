@@ -2,204 +2,511 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>군 작전 상황도 - 최종 통합 마스터본</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>군 작전 상황도 - 자유 배치 캔버스 (UI 및 박스 리사이즈 적용)</title>
 <style>
-  body {
-    font-family: 'Malgun Gothic', sans-serif;
-    background-color: #ffffff;
-    margin: 0;
-    height: 100vh;
-    overflow: hidden;
+  /* 기본 설정 및 스크롤바 디자인 */
+  body { 
+    font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; 
+    background-color: #f0f2f6; 
+    margin: 0; padding: 0;
+    height: 100vh; overflow: hidden;
   }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+  /* 전체 앱 레이아웃 (사이드바 + 메인) */
+  .app-container { display: flex; height: 100vh; width: 100%; }
+
+  /* 좌측 도구모음 사이드바 */
+  .sidebar-area {
+    width: 250px; background-color: #e2e3e5; border-right: 2px solid #adb5bd;
+    display: flex; flex-direction: column; padding: 15px; box-sizing: border-box;
+    transition: margin-left 0.3s ease; overflow-y: auto; flex-shrink: 0; z-index: 50000; gap: 15px;
+  }
+  .sidebar-area.closed { margin-left: -252px; } 
   
+  .sidebar-section { background: #fff; border: 1px solid #ced4da; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .sidebar-header { color: white; font-weight: bold; font-size: 13px; text-align: center; padding: 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .header-yellow { background: #ffc107; color: #000; }
+  .header-blue { background: #4285f4; }
+  
+  /* 도구 아이템 스타일 */
+  .toolbox-item {
+    cursor: grab; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #f8f9fa; border: 1px dashed #adb5bd; border-radius: 4px; padding: 10px;
+    transition: 0.2s; user-select: none;
+  }
+  .toolbox-item:hover { background: #e9ecef; border-color: #6c757d; }
+  .toolbox-item > * { pointer-events: none; } 
+  .tools-row { display: flex; gap: 10px; }
+  .tools-row .toolbox-item { flex: 1; height: 60px; }
+
+  /* 휴지통 스타일 */
+  .trash-can {
+    height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 5px;
+    border: 2px dashed #adb5bd; border-radius: 6px; color: #6c757d; font-weight: bold; font-size: 14px;
+    background: #f8f9fa; transition: all 0.2s;
+  }
+  .trash-can svg { pointer-events: none; width: 30px; height: 30px; }
+  .trash-can.drag-over-trash { background: #f8d7da !important; border-color: #dc3545 !important; color: #dc3545; transform: scale(1.02); }
+
+  /* 대기 부대 영역 */
+  #new-units-area { 
+    min-height: 120px; padding: 10px; border: 1px dashed #adb5bd; border-radius: 4px;
+    display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; background: #f8f9fa;
+  }
+  #new-units-area .unit-wrapper { position: relative; }
+
+  /* 우측 메인 영역 */
+  .main-area { flex: 1; height: 100vh; display: flex; flex-direction: column; background-color: #ffffff; }
+  
+  .top-controls { padding: 15px 30px; border-bottom: 1px solid #dee2e6; background: #fff; display: flex; justify-content: space-between; align-items: center; z-index: 40000;}
+  .controls-group { display: flex; gap: 10px; align-items: center; }
+  .legend-group { display: flex; align-items: center; gap: 15px; font-size: 12px; color: #495057; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .circle-legend { width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box; }
+  
+  /* 자유 배치 캔버스 */
   #canvas-area {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+    position: relative; flex: 1; overflow: auto; 
+    background-color: #ffffff; width: 100%; height: 100%;
+  }
+
+  .canvas-item { position: absolute !important; cursor: grab; user-select: none; }
+  .canvas-item:active { cursor: grabbing; }
+
+  /* 💡 신규 디자인 반영 박스 스타일 */
+  .army-box, .corps-box {
+    background: #f1f3f6; /* 밝은 회색 배경 */
+    border: 1px solid #999;
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 15px;
+    box-sizing: border-box;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.03);
   }
   
-  .canvas-item {
-    position: absolute !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    cursor: move;
-  }
+  .box-title-area { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+  .box-percent-area { font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 5px;}
   
-  /* 마커(XXX) 영역 스타일 */
-  .resize-handle { 
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .percent-input { 
+    width: 45px; text-align: center; border: 1px solid #6c757d; 
+    padding: 3px; font-size: 14px; font-weight: bold; outline: none;
+    pointer-events: auto; /* 드래그 중에도 인풋값 수정 가능하도록 */
+  }
+
+  /* 상단 야전군 박스 */
+  .army-box .box-title { font-size: 18px; font-weight: bold; letter-spacing: 1px; color: #212529; }
+  
+  /* 하단 군단 박스 */
+  .corps-box .box-title { 
+    background: #fff; border: 1px solid #6c757d; 
+    padding: 4px 12px; font-weight: normal; font-size: 14px; color: #000;
+  }
+
+  /* 💡 우측 하단 리사이즈 모서리(Folded Corner) */
+  .box-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, transparent 50%, #999 50%);
+    cursor: se-resize; /* 대각선 리사이즈 커서 */
     z-index: 1001;
-    cursor: crosshair;
-    position: absolute;
-    padding: 5px; /* 마우스로 잡기 쉽도록 클릭 영역 확대 */
   }
+  .box-resize-handle:hover { background: linear-gradient(135deg, transparent 50%, #555 50%); }
 
-  /* 💡 디자인 반영: 이미지와 동일하게 두껍고 촘촘한 'X' 마커 */
-  .x-mark {
-    width: 14px;
-    height: 14px;
-    position: relative;
-    margin: -1.5px; /* X 마커들이 살짝 겹쳐져 연결된 쇠사슬 느낌 부여 */
-  }
-  .x-mark::before, .x-mark::after {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 3.5px; /* 두께감 증가 */
-    background: #888; /* 이미지와 유사한 짙은 회색 */
-    top: 5px;
-    left: -1px;
-    border-radius: 1px;
-  }
-  .x-mark::before { transform: rotate(45deg); }
-  .x-mark::after { transform: rotate(-45deg); }
+  /* 배지 */
+  .badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: white; font-size: 11px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .bg-b { background-color: #6c757d; }
+  
+  /* 부대 마커 (기존 유지) */
+  .unit-wrapper { width: 64px; height: 64px; display: inline-flex; align-items: center; justify-content: center; cursor: grab; user-select: none; pointer-events: auto;}
+  .unit-wrapper > * { pointer-events: none !important; }
+  .unit-circle { position: absolute; width: 100%; height: 100%; border-radius: 50%; box-sizing: border-box; }
+  .unit-symbol { width: 32px; height: 20px; background-color: #92c5e6; border: 1px solid #000; position: relative; display: flex; align-items: center; justify-content: center; z-index: 2; }
+  .unit-symbol.infantry::after { content: 'X'; font-size: 14px; font-weight: normal; color: #000; }
+  .unit-symbol.armor::after { content: ''; width: 12px; height: 8px; border: 1px solid #000; border-radius: 50%; }
+  .unit-symbol.custom-icon { background: none; border: none; }
+  .unit-size, .unit-id, .unit-percent, .unit-badge { position: absolute; z-index: 3; font-weight: bold; color: #212529; }
+  .unit-size { top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; }
+  .unit-id { left: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; }
+  .unit-percent { bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #495057; }
+  .unit-badge { top: 10px; right: 0px; z-index: 4; }
 
-  /* --- 세로선 --- */
-  .divider { width: 30px; height: 250px; }
-  .divider-line {
-    border-left: 4px dashed #888;
-    height: 100%;
-    pointer-events: none;
-  }
-  .divider .resize-handle {
-    flex-direction: column; /* 세로선은 X 마커가 위아래로 정렬되도록 수정 */
-    left: 50%;
-    transform: translateX(-50%);
-  }
-  .divider .top { top: -30px; cursor: n-resize;}
-  .divider .bottom { bottom: -30px; cursor: n-resize;}
+  /* 색상 코드 */
+  .c-pink { border: 2px solid #d63384; } .c-orange { border: 2px solid #fd7e14; }
+  .c-blue { border: 2px solid #0d6efd; } .c-red-dash { border: 2px dashed #dc3545; }
+  .bg-g { background-color: #198754; } .bg-a { background-color: #ffc107; color: #000; }
+  .bg-r { background-color: #dc3545; }
 
-  /* --- 가로선 --- */
-  .divider-horizontal { width: 250px; height: 30px; }
-  .divider-line-h {
-    border-top: 4px dashed #888;
-    width: 100%;
-    pointer-events: none;
-  }
-  .divider-horizontal .resize-handle {
-    flex-direction: row; /* 가로선은 X 마커가 좌우로 정렬되도록 수정 */
-    top: 50%;
-    transform: translateY(-50%);
-  }
-  .divider-horizontal .left { left: -30px; cursor: ew-resize;}
-  .divider-horizontal .right { right: -30px; cursor: ew-resize;}
+  /* 기타 버튼/모달 (생략/유지) */
+  .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: 0.2s; display: flex; align-items: center; justify-content: center;}
+  .btn-primary { background: #0d6efd; color: white; } .btn-primary:hover { background: #0b5ed7; }
+  .btn-secondary { background: #6c757d; color: white; } .btn-secondary:hover { background: #5a6268; }
+  .btn-toggle { background: #495057; color: white; font-size: 14px; padding: 6px 10px; } .btn-toggle:hover { background: #343a40; }
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100000; display: none; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal-content { background: #fff; width: 450px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header { padding: 15px 20px; background: #f8f9fa; font-weight: bold; font-size: 16px; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; }
+  .modal-body { padding: 0; max-height: 400px; overflow-y: auto; }
+  .modal-footer { padding: 15px 20px; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 10px; }
+  .list-item { display: flex; align-items: center; gap: 15px; padding: 10px 20px; border-bottom: 1px solid #f1f3f5; cursor: pointer; }
+  .list-item:hover { background: #e9ecef; }
+  .list-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  .list-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .list-name { font-size: 14px; font-weight: bold; color: #343a40; }
+  .list-desc { font-size: 12px; color: #6c757d; }
+  .preview-wrap { transform: scale(0.7); transform-origin: center right; }
 </style>
 </head>
 <body>
 
-<div id="canvas-area">
-  <div class="canvas-item divider" style="left: 400px; top: 150px;">
-    <div class="resize-handle top"><div class="x-mark"></div><div class="x-mark"></div></div>
-    <div class="divider-line"></div>
-    <div class="resize-handle bottom"><div class="x-mark"></div><div class="x-mark"></div></div>
-  </div>
+<div class="app-container">
   
-  <div class="canvas-item divider-horizontal" style="left: 100px; top: 150px;">
-    <div class="resize-handle left"><div class="x-mark"></div><div class="x-mark"></div></div>
-    <div class="divider-line-h"></div>
-    <div class="resize-handle right"><div class="x-mark"></div><div class="x-mark"></div></div>
+  <div class="sidebar-area" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-header header-yellow">신규 / 대기 부대</div>
+      <div id="new-units-area"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-header header-blue">군단박스 추가</div>
+      <div class="toolbox-item" data-type="tool-box" title="드래그하여 군단 박스 생성">
+        <div style="font-size:12px; border:1px solid #6c757d; padding:2px 5px; background:#fff; margin-bottom:5px;">OO Corps</div>
+        <div style="font-size:12px; font-weight:bold;">0 %</div>
+      </div>
+    </div>
+    <div class="sidebar-section" style="margin-top: auto; margin-bottom: 0;">
+      <div class="sidebar-header header-blue">휴지통</div>
+      <div class="trash-can" id="trash-can" title="여기로 드래그하여 삭제">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="top-controls">
+      <div class="controls-group">
+        <button id="btn-sidebar-toggle" class="btn btn-toggle" title="도구모음 토글">◀</button>
+        <button id="btn-open-modal" class="btn btn-primary">+ 부대마커 추가</button>
+      </div>
+    </div>
+
+    <div id="canvas-area">
+      <div class="canvas-item army-box" style="left: 30px; top: 30px; width: 450px; height: 90px;">
+        <div class="box-title-area">
+          <div class="box-title">서부 TROKA</div>
+          <div class="badge bg-b">B</div>
+        </div>
+        <div class="box-percent-area"><input type="text" value="20" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      </div>
+
+      <div class="canvas-item army-box" style="left: 500px; top: 30px; width: 450px; height: 90px;">
+        <div class="box-title-area">
+          <div class="box-title">동부 TROKA</div>
+          <div class="badge bg-b">B</div>
+        </div>
+        <div class="box-percent-area"><input type="text" value="70" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      </div>
+
+      <div class="canvas-item corps-box" style="left: 30px; top: 140px; width: 140px; height: 280px;">
+        <div class="box-title-area">
+          <div class="box-title">OO Corps</div><div class="badge bg-b">B</div>
+        </div>
+        <div class="box-percent-area"><input type="text" value="0" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      </div>
+      
+      <div class="canvas-item corps-box" style="left: 185px; top: 140px; width: 140px; height: 280px;">
+        <div class="box-title-area">
+          <div class="box-title">OO Corps</div><div class="badge bg-b">B</div>
+        </div>
+        <div class="box-percent-area"><input type="text" value="0" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      </div>
+      
+      <div class="canvas-item corps-box" style="left: 340px; top: 140px; width: 140px; height: 280px;">
+        <div class="box-title-area">
+          <div class="box-title">OO Corps</div><div class="badge bg-b">B</div>
+        </div>
+        <div class="box-percent-area"><input type="text" value="0" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="add-unit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span>추가할 부대 선택</span>
+      <button class="btn btn-secondary" id="btn-close-modal" style="padding: 2px 8px;">X</button>
+    </div>
+    <div class="modal-body" id="modal-unit-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-cancel-modal">취소</button>
+      <button class="btn btn-primary" id="btn-apply-add">선택 항목 추가</button>
+    </div>
   </div>
 </div>
 
 <script>
-  let isResizing = false, isDragging = false;
+  /* --- 1. 팝업 및 UI 토글 --- */
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('btn-sidebar-toggle');
+  const newUnitsArea = document.getElementById('new-units-area');
+  
+  toggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('closed');
+    toggleBtn.innerHTML = sidebar.classList.contains('closed') ? '▶' : '◀';
+  });
+
+  const availableUnits = [
+    { id: 'u1', name: '제9보병사단', size: 'XX', unitId: '9', type: 'infantry', badge: 'G', percent: '95%', border: '' },
+    { id: 'u2', name: '제15기갑여단', size: 'X', unitId: '15', type: 'armor', badge: 'A', percent: '80%', border: 'c-red-dash' }
+  ];
+  const modal = document.getElementById('add-unit-modal');
+  const modalList = document.getElementById('modal-unit-list');
+
+  function generateUnitHTML(data) {
+    let symbolHTML = '';
+    if(data.type === 'infantry' || data.type === 'armor') symbolHTML = `<div class="unit-symbol ${data.type}"></div>`;
+    let badgeClass = data.badge.toLowerCase();
+    let borderHTML = data.border ? `<div class="unit-circle ${data.border}"></div>` : '';
+    return `<div class="unit-wrapper">${borderHTML}<div class="unit-size">${data.size}</div><div class="unit-id">${data.unitId}</div>${symbolHTML}<div class="badge bg-${badgeClass} unit-badge">${data.badge}</div><div class="unit-percent">${data.percent}</div></div>`;
+  }
+
+  document.getElementById('btn-open-modal').addEventListener('click', () => {
+    modalList.innerHTML = availableUnits.map(unit => `
+      <label class="list-item"><input type="checkbox" class="unit-checkbox" value="${unit.id}">
+      <div class="list-info"><div class="list-name">${unit.name}</div></div>
+      <div class="preview-wrap">${generateUnitHTML(unit)}</div></label>
+    `).join('');
+    modal.classList.add('active');
+  });
+
+  const closeModal = () => modal.classList.remove('active');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  
+  document.getElementById('btn-apply-add').addEventListener('click', () => {
+    document.querySelectorAll('.unit-checkbox:checked').forEach(cb => {
+      const unitData = availableUnits.find(u => u.id === cb.value);
+      if (unitData) newUnitsArea.insertAdjacentHTML('beforeend', generateUnitHTML(unitData));
+    });
+    closeModal();
+  });
+
+  /* --- 2. 통합 드래그 & 리사이즈 로직 --- */
+  let zCounters = { box: 100, unit: 2000, line: 3000 };
+  let isDragging = false, isBoxResizing = false;
+  let currentDrag = null, dragClone = null, dragType = null, isTool = false; 
+  let offsetX, offsetY, dragCategory = null;
+  let originalParent = null, originalLeft = '', originalTop = '';
   let activeHandle = null, targetItem = null;
   let startX, startY, startW, startH, startTop, startLeft;
+  
+  const canvasArea = document.getElementById('canvas-area');
+  const trashCan = document.getElementById('trash-can');
 
-  function lineResizeHandleMouseDown(e) {
-    // 1. 끝단(XXX) 마커 클릭 시 -> 사이즈 조절(Resize)
-    if (e.target.closest('.resize-handle')) {
-      isResizing = true;
-      activeHandle = e.target.closest('.resize-handle');
-      targetItem = activeHandle.closest('.canvas-item');
+  function isOverlapping(rect1, rect2) {
+    return !(rect1.right < rect2.left || rect1.left > rect2.right || rect1.bottom < rect2.top || rect1.top > rect2.bottom);
+  }
+
+  document.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return; // 좌클릭만 허용
+    if (e.target.closest('.modal-overlay') || e.target.closest('.top-controls')) return; 
+
+    // 인풋 박스(입력창) 클릭 시 드래그 방지 및 커서 허용
+    if (e.target.classList.contains('percent-input')) {
+        e.stopPropagation();
+        return; 
+    }
+
+    // 💡 1. 박스 리사이즈(우측 하단 접힌 모서리) 클릭 감지
+    let boxResizeHandle = e.target.closest('.box-resize-handle');
+    if (boxResizeHandle) {
+      isBoxResizing = true;
+      targetItem = boxResizeHandle.closest('.canvas-item');
       
       startX = e.clientX; 
       startY = e.clientY;
       startW = targetItem.offsetWidth; 
       startH = targetItem.offsetHeight;
-      startTop = targetItem.offsetTop; 
-      startLeft = targetItem.offsetLeft;
-      
-      targetItem.style.zIndex = 999999; // 현재 제어 중인 객체를 최상단으로
-      e.stopPropagation(); 
-      e.preventDefault();
-    } 
-    // 2. 점선 본체 클릭 시 -> 이동(Drag)
-    else if (e.target.closest('.canvas-item')) {
-      isDragging = true;
-      targetItem = e.target.closest('.canvas-item');
-      
-      // 객체 내 클릭 위치 오프셋 계산
-      startX = e.clientX - targetItem.offsetLeft;
-      startY = e.clientY - targetItem.offsetTop;
       
       targetItem.style.zIndex = 999999;
+      
+      e.stopPropagation(); 
+      e.preventDefault();
+      
+      document.addEventListener('mousemove', onBoxResizeMove);
+      document.addEventListener('mouseup', onBoxResizeUp);
+      return;
     }
+
+    // 💡 2. 기존 드래그 앤 드롭
+    let tool = e.target.closest('.toolbox-item');
+    let unit = e.target.closest('.unit-wrapper');
+    let box = e.target.closest('.corps-box, .army-box'); // 새로 추가한 army-box도 드래그 대상에 포함
+    let trash = e.target.closest('.trash-can');
+
+    if (trash) return; 
+
+    if (tool) {
+      dragType = tool.dataset.type; currentDrag = tool; isTool = true; 
+    } else if (unit) { 
+      dragType = 'unit'; currentDrag = unit; isTool = false; 
+    } else if (box) { 
+      dragType = 'box'; currentDrag = box; isTool = false; 
+    } else return; 
+
+    e.preventDefault();
+    isDragging = true;
+    dragCategory = dragType.includes('unit') ? 'unit' : dragType.includes('box') ? 'box' : 'line';
+    zCounters[dragCategory]++; 
+
+    if (isTool) {
+      dragClone = document.createElement('div');
+      dragClone.className = 'canvas-item corps-box';
+      // 툴바에서 꺼낼 때 생성되는 새로운 박스 구조
+      dragClone.innerHTML = `
+        <div class="box-title-area"><div class="box-title">OO Corps</div><div class="badge bg-b">B</div></div>
+        <div class="box-percent-area"><input type="text" value="0" class="percent-input"> %</div>
+        <div class="box-resize-handle"></div>
+      `;
+      dragClone.style.width = '140px';
+      dragClone.style.height = '280px';
+      
+      dragClone.style.position = 'fixed';
+      dragClone.style.visibility = 'hidden';
+      document.body.appendChild(dragClone);
+      const cloneRect = dragClone.getBoundingClientRect();
+      offsetX = cloneRect.width / 2;
+      offsetY = cloneRect.height / 2;
+      dragClone.style.visibility = 'visible';
+    } else {
+      dragClone = currentDrag;
+      originalParent = currentDrag.parentNode;
+      originalLeft = currentDrag.style.left;
+      originalTop = currentDrag.style.top;
+
+      const rect = currentDrag.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      
+      dragClone.style.position = 'fixed';
+      dragClone.style.left = rect.left + 'px';
+      dragClone.style.top = rect.top + 'px';
+      document.body.appendChild(dragClone);
+    }
+  
+    dragClone.style.zIndex = 999999;
+    dragClone.style.pointerEvents = 'none'; 
+    dragClone.style.margin = '0';
+    if (!isTool) currentDrag.style.opacity = '0.7';
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);   
+  });
+
+  // 💡 [신규] 박스 리사이즈 전용 이동/종료 함수
+  function onBoxResizeMove(e) {
+    if (!isBoxResizing || !targetItem) return;
+    
+    // 박스가 너무 작아져서 UI가 깨지는 것을 방지하는 최소 크기
+    const MIN_WIDTH = 120; 
+    const MIN_HEIGHT = 80;
+
+    let newWidth = startW + (e.clientX - startX);
+    let newHeight = startH + (e.clientY - startY);
+    
+    targetItem.style.width = Math.max(MIN_WIDTH, newWidth) + 'px';
+    targetItem.style.height = Math.max(MIN_HEIGHT, newHeight) + 'px';
   }
 
-  function lineResizeHandleMouseMove(e) {
-    if (isResizing && targetItem) {
-      const MIN_SIZE = 80; // 선이 반전되거나 완전히 사라지는 것을 막기 위한 최소 길이
-      
-      if (targetItem.classList.contains('divider')) {
-        // [세로선] 위/아래 크기 조절 로직
-        if (activeHandle.classList.contains('bottom')) {
-          let newHeight = startH + (e.clientY - startY);
-          targetItem.style.height = Math.max(MIN_SIZE, newHeight) + 'px';
-        } 
-        else if (activeHandle.classList.contains('top')) {
-          let deltaY = e.clientY - startY;
-          let newHeight = startH - deltaY;
-          if (newHeight >= MIN_SIZE) {
-            targetItem.style.height = newHeight + 'px';
-            targetItem.style.top = (startTop + deltaY) + 'px';
-          }
-        }
-      } else if (targetItem.classList.contains('divider-horizontal')) {
-        // [가로선] 좌/우 크기 조절 로직
-        if (activeHandle.classList.contains('right')) {
-          let newWidth = startW + (e.clientX - startX);
-          targetItem.style.width = Math.max(MIN_SIZE, newWidth) + 'px';
-        } 
-        else if (activeHandle.classList.contains('left')) {
-          let deltaX = e.clientX - startX;
-          let newWidth = startW - deltaX;
-          if (newWidth >= MIN_SIZE) {
-            targetItem.style.width = newWidth + 'px';
-            targetItem.style.left = (startLeft + deltaX) + 'px';
-          }
+  function onBoxResizeUp(e) {
+    if (!isBoxResizing) return;
+    isBoxResizing = false;
+    
+    if (targetItem) targetItem.style.zIndex = zCounters['box'] || 100;
+    targetItem = null;
+    
+    document.removeEventListener('mousemove', onBoxResizeMove);
+    document.removeEventListener('mouseup', onBoxResizeUp);
+  }
+
+  // 기존 드래그 앤 드롭 함수
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    dragClone.style.left = (e.clientX - offsetX) + 'px';
+    dragClone.style.top = (e.clientY - offsetY) + 'px';
+
+    const dragRect = dragClone.getBoundingClientRect();
+    const trashRect = trashCan.getBoundingClientRect();
+    if (isOverlapping(dragRect, trashRect)) trashCan.classList.add('drag-over-trash');
+    else trashCan.classList.remove('drag-over-trash');
+  }
+
+  function onMouseUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+
+    dragClone.style.pointerEvents = 'auto'; 
+    
+    const dragRect = dragClone.getBoundingClientRect();
+    const trashRect = trashCan.getBoundingClientRect();
+    const canvasRect = canvasArea.getBoundingClientRect();
+
+    let isOverTrash = isOverlapping(dragRect, trashRect);
+    let isOutsideCanvas = (dragRect.left < canvasRect.left || dragRect.right > canvasRect.right || dragRect.top < canvasRect.top || dragRect.bottom > canvasRect.bottom);
+    
+    if (isOverTrash) {
+      dragClone.remove();
+      trashCan.classList.remove('drag-over-trash');
+    } 
+    else if (isOutsideCanvas) {
+      if (isTool) dragClone.remove(); 
+      else {
+        if (originalParent && originalParent.id === 'new-units-area') {
+          dragClone.style.position = 'relative'; dragClone.style.left = ''; dragClone.style.top = '';
+          dragClone.style.zIndex = ''; dragClone.classList.remove('canvas-item'); originalParent.appendChild(dragClone);
+        } else {
+          dragClone.style.position = 'absolute'; dragClone.style.left = originalLeft; dragClone.style.top = originalTop;
+          dragClone.style.zIndex = zCounters[dragCategory]; canvasArea.appendChild(dragClone);
         }
       }
-    } else if (isDragging && targetItem) {
-      // 본체 드래그 이동 로직
-      targetItem.style.left = (e.clientX - startX) + 'px';
-      targetItem.style.top = (e.clientY - startY) + 'px';
     }
-  }  
-  
-  function init() {
-    if (targetItem) targetItem.style.zIndex = 1000; // z-index 원복
-    isResizing = false; 
-    isDragging = false;
-    activeHandle = null; 
-    targetItem = null; 
+    else {
+      let newLeft = dragRect.left - canvasRect.left + canvasArea.scrollLeft;
+      let newTop = dragRect.top - canvasRect.top + canvasArea.scrollTop;
+
+      dragClone.style.position = 'absolute'; dragClone.style.left = newLeft + 'px'; dragClone.style.top = newTop + 'px';
+      dragClone.style.zIndex = zCounters[dragCategory];
+      
+      if (dragClone.parentNode !== canvasArea) {
+        dragClone.classList.add('canvas-item'); canvasArea.appendChild(dragClone);
+      }
+    }
+
+    if (currentDrag) currentDrag.style.opacity = '1';
+    currentDrag = null; dragClone = null; dragType = null; dragCategory = null; originalParent = null;
   }
-  
-  document.addEventListener('mousedown', (e) => {
-	lineResizeHandleMouseDown(e);
-  });
-
-  document.addEventListener('mousemove', (e) => {
-	lineResizeHandleMouseMove(e);
-  });
-
-  document.addEventListener('mouseup', () => {
-	init();
-  });
 </script>
+
 </body>
 </html>
