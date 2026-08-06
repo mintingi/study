@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>N-Depth 동적 피벗 테이블 (최종 통합 컴포넌트)</title>
+<style>
+    body { 
+        font-family: 'Malgun Gothic', '맑은 고딕', dotum, sans-serif; 
+        font-size: 13px; 
+        padding: 20px; 
+        color: #333333;
+    }
+    
+    /* 1. 스크롤 레이아웃: 브라우저가 좁아지면 가로 스크롤 생성 */
+    #pivot-container {
+        width: 100%;
+        overflow-x: auto; 
+        padding-bottom: 15px;
+    }
+
+    /* 2. WebSquare Enterprise Look & 테이블 최소 너비 설정 */
+    table { 
+        border-collapse: collapse; 
+        width: 100%; 
+        min-width: 1000px; /* 테이블 최소 너비 이하로 찌그러짐 방지 */
+        text-align: center; 
+        table-layout: fixed; 
+        border-top: 2px solid #5a7596; /* 웹스퀘어 상단 포인트 라인 */
+        border-bottom: 1px solid #a3a3a3;
+    }
+    
+    /* 3. 셀 개별 스타일 및 테두리 */
+    th, td { 
+        border-right: 1px solid #dcdcdc; 
+        border-bottom: 1px solid #dcdcdc; 
+        padding: 6px 8px; 
+        vertical-align: middle; 
+        text-align: left; 
+        min-width: 90px;
+        word-break: keep-all;
+    }
+    th:first-child, td:first-child { border-left: 1px solid #dcdcdc; }
+    
+    /* 4. 헤더 그라데이션 및 정렬 */
+    thead th { 
+        background: #f7f7f7; 
+        background: linear-gradient(to bottom, #ffffff 0%, #f1f1f1 100%);
+        border-bottom: 1px solid #c5c5c5; 
+        font-weight: bold; 
+        color: #444444; 
+        text-align: center; 
+    }
+    
+    /* 5. 조건부 서식 배경색 (operate, totalrate 기준) */
+    .bg-green  { background-color: #92d050; }
+    .bg-yellow { background-color: #ffff99; }
+    .bg-red    { background-color: #ff9999; }
+    .bg-black  { background-color: #bfbfbf; } /* 가독성을 위한 회색 */
+
+    /* 6. 네모박스 및 글자 레이아웃 (Flexbox) */
+    .cell-wrapper {
+        display: flex;
+        align-items: flex-start; /* 여러 줄이어도 네모박스는 첫 줄 상단 고정 */
+        gap: 5px;
+        cursor: pointer; /* 더블클릭 가능 상징 */
+    }
+
+    .sq-box { 
+        flex-shrink: 0; /* 네모박스 찌그러짐 절대 방지 */
+        font-size: 1.1em; 
+        margin-top: 2px;
+    }
+    /* 조건부 서식 네모박스색 (orgrate 기준) */
+    .sq-green  { color: #00b050; }
+    .sq-yellow { color: #ffc000; }
+    .sq-red    { color: #ff0000; }
+    .sq-black  { color: #595959; }
+
+    /* 7. 최대 2줄 제한 및 말줄임표(...) 처리 */
+    .text-content { 
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* 최대 2줄까지 표시 */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3; 
+        white-space: normal;
+    }
+</style>
+</head>
+<body>
+
+    <h2>장비 운용 및 편성 현황 (웹스퀘어 스타일 Dynamic Pivot)</h2>
+    <div id="pivot-container"></div>
+
+<script>
+    // ==========================================
+    // 🛠️ 1. 설정 객체 (변하는 환경 설정)
+    // ==========================================
+    const mappingConfig = {
+        headerMerge: "Y",  // "Y": 헤더(가로) 병합 적용, "N": 병합 해제
+        cellMerge: "Y",    // "Y": 데이터(세로) 병합 적용, "N": 병합 해제
+        
+        // ★ N-Depth 헤더 지원: 배열에 컬럼명을 2개든 5개든 추가하는 대로 N단 헤더가 자동 생성됩니다.
+        headers: ['macode', 'mecode', 'sucode'], 
+        
+        total: 'totalrate', // 4행 요약 수치 컬럼
+        text: 'equnm',      // 셀 표시 텍스트 컬럼
+        boxVal: 'orgrate',  // 네모박스(■) 색상 기준 컬럼
+        bgVal: 'operate'    // 셀 배경색 기준 컬럼
+    };
+
+    // ==========================================
+    // 2. DB 조회 결과 Mock 데이터
+    // ==========================================
+    const dbData = [
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '105mm 곡사포', orgrate: 87, operate: 56 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '155mm 곡사포', orgrate: 96, operate: 55 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-55 자주포', orgrate: 49, operate: 71 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-9 자주포', orgrate: 69, operate: 52 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: '현궁', orgrate: 75, operate: 78 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: 'T-80U (텍스트가 길어져도 2줄 제한 및 말줄임표 처리됩니다)', orgrate: 45, operate: 90 },
+        { macode: '화력', mecode: '화력지원', sucode: '표적탐지', totalrate: null, equnm: null, orgrate: null, operate: null },
+        { macode: '화력', mecode: '화력지원', sucode: '화력통제', totalrate: 85, equnm: '현무', orgrate: 20, operate: 55 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-1', orgrate: 95, operate: 41 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 }, // 중복 데이터 (cellMerge 병합 테스트용)
+        { macode: '기동', mecode: '전차', sucode: '전투지원용', totalrate: 97, equnm: '00구난전차', orgrate: 93, operate: 79 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '인원수송용(0000)', orgrate: 100, operate: 34 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '전투장갑차(X-0001)', orgrate: 72, operate: 95 },
+        { macode: '기동', mecode: '장갑차', sucode: '지휘통제용', totalrate: 80, equnm: '전투지뢰(K2)', orgrate: 23, operate: 52 }
+    ];
+
+    // 3. 색상 판별 함수
+    function getColorSuffix(val) {
+        if (val === null || val === undefined || val === '') return '';
+        const num = Number(val);
+        if (num >= 90) return 'green';
+        if (num >= 75) return 'yellow';
+        if (num >= 50) return 'red';
+        return 'black';
+    }
+
+    // ==========================================
+    // ⚙️ 4. N-Depth 구조 파싱 엔진 (colspan 계산)
+    // ==========================================
+    function buildNDepthStructure(data, conf) {
+        const columns = [];
+        const dataGroup = {};
+        let maxRows = 0;
+
+        data.forEach(item => {
+            const keys = conf.headers.map(h => item[h] || '');
+            const colKey = keys.join('|');
+
+            if (!dataGroup[colKey]) {
+                dataGroup[colKey] = [];
+                columns.push({ colKey, keys, totalValue: item[conf.total] });
+            }
+            if (item[conf.text]) {
+                dataGroup[colKey].push(item);
+            }
+            if (dataGroup[colKey].length > maxRows) maxRows = dataGroup[colKey].length;
+        });
+
+        // 헤더 가로 병합(colspan) Matrix 계산
+        const headerMatrix = [];
+        for (let depth = 0; depth < conf.headers.length; depth++) {
+            headerMatrix[depth] = [];
+            let currentCell = null;
+            
+            for (let c = 0; c < columns.length; c++) {
+                const text = columns[c].keys[depth];
+                const fullPath = columns[c].keys.slice(0, depth + 1).join('|');
+
+                if (conf.headerMerge !== "Y" || !currentCell || currentCell.fullPath !== fullPath) {
+                    currentCell = { text: text, fullPath: fullPath, colspan: 1 };
+                    headerMatrix[depth].push(currentCell);
+                } else {
+                    currentCell.colspan++;
+                }
+            }
+        }
+        return { columns, headerMatrix, dataGroup, maxRows };
+    }
+
+    // ==========================================
+    // 🎨 5. 동적 테이블 렌더링 및 이벤트 바인딩
+    // ==========================================
+    function renderTable() {
+        const conf = mappingConfig;
+        const { columns, headerMatrix, dataGroup, maxRows } = buildNDepthStructure(dbData, conf);
+        
+        let html = `<table><thead>`;
+        
+        // 5-1. 헤더 (colspan) 출력
+        headerMatrix.forEach(row => {
+            html += `<tr>`;
+            row.forEach(cell => {
+                html += `<th colspan="${cell.colspan}">${cell.text}</th>`;
+            });
+            html += `</tr>`;
+        });
+
+        // 5-2. 요약 수치 행
+        if (conf.total) {
+            html += `<tr>`;
+            columns.forEach(col => {
+                const colorClass = col.totalValue ? `bg-${getColorSuffix(col.totalValue)}` : '';
+                html += `<th class="${colorClass}">${col.totalValue || ''}</th>`;
+            });
+            html += `</tr>`;
+        }
+        html += `</thead><tbody>`;
+
+        // 5-3. 데이터 세로 병합(rowspan)을 위한 2차원 Grid 조립
+        const bodyGrid = [];
+        for (let i = 0; i < maxRows; i++) {
+            bodyGrid[i] = [];
+            columns.forEach((col, c) => {
+                const item = dataGroup[col.colKey][i];
+                if (item) {
+                    bodyGrid[i][c] = {
+                        item: item, textValue: item[conf.text], boxVal: item[conf.boxVal], bgVal: item[conf.bgVal],
+                        rowspan: 1, skip: false
+                    };
+                } else {
+                    bodyGrid[i][c] = { empty: true, rowspan: 1, skip: false };
+                }
+            });
+        }
+
+        // cellMerge === 'Y' 일 때 세로 병합 스캔
+        if (conf.cellMerge === "Y") {
+            for (let c = 0; c < columns.length; c++) {
+                let currentCell = null;
+                for (let r = 0; r < maxRows; r++) {
+                    const cell = bodyGrid[r][c];
+                    if (cell.empty) {
+                        currentCell = null; 
+                        continue;
+                    }
+                    if (!currentCell || 
+                        currentCell.textValue !== cell.textValue || 
+                        currentCell.boxVal !== cell.boxVal || 
+                        currentCell.bgVal !== cell.bgVal) {
+                        currentCell = cell; 
+                    } else {
+                        currentCell.rowspan++; 
+                        cell.skip = true;      
+                    }
+                }
+            }
+        }
+
+        // 5-4. Grid 데이터를 HTML <tr> <td> 로 변환 (좌표 data-row, data-col 부여)
+        for (let r = 0; r < maxRows; r++) {
+            html += `<tr>`;
+            for (let c = 0; c < columns.length; c++) {
+                const cell = bodyGrid[r][c];
+                
+                if (cell.skip) continue; 
+
+                if (cell.empty) {
+                    html += `<td></td>`;
+                } else {
+                    const bgClass = `bg-${getColorSuffix(cell.bgVal)}`;
+                    const sqColorClass = `sq-${getColorSuffix(cell.boxVal)}`;
+                    const rowspanAttr = cell.rowspan > 1 ? `rowspan="${cell.rowspan}"` : '';
+                    
+                    // 좌표 데이터 및 툴팁(title) 부여
+                    html += `<td class="${bgClass}" ${rowspanAttr} data-row="${r}" data-col="${c}">
+                                <div class="cell-wrapper">
+                                    <span class="sq-box ${sqColorClass}">■</span>
+                                    <span class="text-content" title="${cell.textValue}">${cell.textValue}</span>
+                                </div>
+                             </td>`;
+                }
+            }
+            html += `</tr>`;
+        }
+        
+        html += `</tbody></table>`;
+        
+        const containerEl = document.getElementById('pivot-container');
+        containerEl.innerHTML = html;
+
+        // ==========================================
+        // ⚡ 6. 셀 더블클릭 이벤트 바인딩 (이벤트 위임)
+        // ==========================================
+        const tableEl = containerEl.querySelector('table');
+        tableEl.ondblclick = function(e) {
+            const td = e.target.closest('td');
+            if (!td) return;
+
+            const rIdx = td.getAttribute('data-row');
+            const cIdx = td.getAttribute('data-col');
+
+            if (rIdx !== null && cIdx !== null) {
+                // 메모리 상의 2차원 배열에서 원본 데이터 꺼내기
+                const cellData = bodyGrid[rIdx][cIdx];
+
+                const eventParams = {
+                    rowIndex: parseInt(rIdx, 10),
+                    colIndex: parseInt(cIdx, 10),
+                    rowspan: cellData.rowspan,
+                    rowData: cellData.item // DB에서 조회했던 원본 Row 객체 통째로 전달
+                };
+
+                // 더블클릭 콜백 결과 출력
+                console.log("[Pivot Cell DoubleClick Event]", eventParams);
+                
+                alert(`[더블클릭 이벤트 발생]\n` +
+                      `· rowIndex: ${eventParams.rowIndex}\n` +
+                      `· colIndex: ${eventParams.colIndex}\n` +
+                      `· 2번째헤더명: ${eventParams.rowData.mecode}\n` +
+                      `· 장비명: ${eventParams.rowData.equnm}\n` +
+                      `· operate: ${eventParams.rowData.operate}\n` +
+                      `· orgrate: ${eventParams.rowData.orgrate}`);
+            }
+        };
+    }
+
+    window.onload = renderTable;
+</script>
+
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>동적 장비 현황 피벗 테이블 (Config 적용)</title>
+<style>
+    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 14px; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; text-align: center; }
+    th, td { border: 1px solid #000; padding: 10px 8px; min-width: 120px; vertical-align: top; text-align: left; }
+    thead th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    
+    .bg-green { background-color: #92d050; }
+    .bg-yellow { background-color: #ffff99; }
+    .bg-red { background-color: #ff9999; }
+    .bg-black { background-color: #bfbfbf; }
+
+    .sq-box { display: inline-block; white-space: nowrap; font-size: 1.1em; margin-right: 5px; vertical-align: middle; }
+    .sq-green { color: #00b050; }
+    .sq-yellow { color: #ffc000; }
+    .sq-red { color: #ff0000; }
+    .sq-black { color: #595959; }
+
+    .text-content { word-break: keep-all; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+    <h2>장비 운용 및 편성 현황 (Dynamic Data Mapping)</h2>
+    <div id="pivot-container"></div>
+
+<script>
+    // ==========================================
+    // 🛠️ 1. 설정 객체 (여기만 수정하면 모든 데이터에 대응 가능!)
+    // ==========================================
+    const mappingConfig = {
+        header1: 'macode',   // 1행: 대분류로 사용할 데이터 컬럼명
+        header2: 'mecode',   // 2행: 중분류로 사용할 데이터 컬럼명
+        header3: 'sucode',   // 3행: 소분류로 사용할 데이터 컬럼명
+        total: 'totalrate',  // 4행: 하단 요약수치로 사용할 데이터 컬럼명
+
+        text: 'equnm',       // 셀 내용: 화면에 찍힐 텍스트 컬럼명
+        boxVal: 'orgrate',   // 조건부 색상: 네모박스(■) 기준 컬럼명
+        bgVal: 'operate'     // 조건부 색상: 셀 배경색 기준 컬럼명
+    };
+
+    // 2. DB 조회 결과 Mock 데이터
+    // (만약 백엔드에서 내려주는 key가 name1, name2 등으로 바뀌면 위의 config만 수정하면 됩니다.)
+    const dbData = [
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '105mm 곡사포', orgrate: 87, operate: 56 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '155mm 곡사포', orgrate: 96, operate: 55 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-55 자주포', orgrate: 49, operate: 71 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-9 자주포', orgrate: 69, operate: 52 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: '현궁', orgrate: 75, operate: 78 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: 'T-80U', orgrate: 45, operate: 90 },
+        { macode: '화력', mecode: '화력지원', sucode: '표적탐지', totalrate: null, equnm: null, orgrate: null, operate: null },
+        { macode: '화력', mecode: '화력지원', sucode: '화력통제', totalrate: 85, equnm: '현무', orgrate: 20, operate: 55 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-1', orgrate: 95, operate: 41 },
+        { macode: '기동', mecode: '전차', sucode: '전투지원용', totalrate: 97, equnm: '00구난전차', orgrate: 93, operate: 79 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '인원수송용(0000)', orgrate: 100, operate: 34 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '전투장갑차(X-0001)', orgrate: 72, operate: 95 },
+        { macode: '기동', mecode: '장갑차', sucode: '지휘통제용', totalrate: 80, equnm: '전투지뢰(K2)', orgrate: 23, operate: 52 }
+    ];
+
+    // 3. 색상 로직
+    function getColorSuffix(val) {
+        if (val === null || val === undefined || val === '') return '';
+        const num = Number(val);
+        if (num >= 90) return 'green';
+        if (num >= 75) return 'yellow';
+        if (num >= 50) return 'red';
+        return 'black';
+    }
+
+    // 4. 데이터 구조화 엔진 (config 변수를 바탕으로 동적 해석)
+    function buildPivotStructure(data, conf) {
+        const columns = [];
+        const tree = {};
+        const dataGroup = {};
+        let maxRows = 0;
+
+        data.forEach(item => {
+            // conf 객체를 이용해 동적으로 값을 꺼내옴
+            const h1 = item[conf.header1];
+            const h2 = item[conf.header2];
+            const h3 = item[conf.header3];
+            const tRate = item[conf.total];
+            
+            const colKey = `${h1}|${h2}|${h3}`;
+            
+            if (!dataGroup[colKey]) dataGroup[colKey] = [];
+            
+            // 데이터(텍스트)가 존재할 경우에만 배열에 담음
+            if (item[conf.text]) {
+                dataGroup[colKey].push(item);
+            }
+            if (dataGroup[colKey].length > maxRows) maxRows = dataGroup[colKey].length;
+
+            if (!tree[h1]) tree[h1] = {};
+            if (!tree[h1][h2]) tree[h1][h2] = {};
+            if (!tree[h1][h2][h3]) {
+                tree[h1][h2][h3] = { totalValue: tRate };
+                columns.push({ colKey, h1, h2, h3, totalValue: tRate });
+            }
+        });
+
+        return { columns, tree, dataGroup, maxRows };
+    }
+
+    // 5. 테이블 렌더링
+    function renderTable() {
+        const { columns, tree, dataGroup, maxRows } = buildPivotStructure(dbData, mappingConfig);
+        const conf = mappingConfig;
+        
+        let html = `<table><thead>`;
+        
+        // 1행 (대분류)
+        html += `<tr>`;
+        Object.keys(tree).forEach(k1 => {
+            let colSpan = 0;
+            Object.keys(tree[k1]).forEach(k2 => colSpan += Object.keys(tree[k1][k2]).length);
+            html += `<th colspan="${colSpan}">${k1}</th>`;
+        });
+        html += `</tr>`;
+
+        // 2행 (중분류)
+        html += `<tr>`;
+        Object.keys(tree).forEach(k1 => {
+            Object.keys(tree[k1]).forEach(k2 => {
+                const colSpan = Object.keys(tree[k1][k2]).length;
+                html += `<th colspan="${colSpan}">${k2}</th>`;
+            });
+        });
+        html += `</tr>`;
+
+        // 3행 (소분류)
+        html += `<tr>`;
+        columns.forEach(col => {
+            html += `<th>${col.h3}</th>`;
+        });
+        html += `</tr>`;
+
+        // 4행 (요약 수치 - totalValue)
+        html += `<tr>`;
+        columns.forEach(col => {
+            const colorClass = col.totalValue ? `bg-${getColorSuffix(col.totalValue)}` : '';
+            html += `<th class="${colorClass}">${col.totalValue || ''}</th>`;
+        });
+        html += `</tr></thead><tbody>`;
+
+        // 데이터 행 (배열 인덱스 접근)
+        for (let i = 0; i < maxRows; i++) {
+            html += `<tr>`;
+            columns.forEach(col => {
+                const item = dataGroup[col.colKey][i];
+                if (item) {
+                    // 설정 객체(conf)에 지정된 키값으로 동적 호출
+                    const bgClass = `bg-${getColorSuffix(item[conf.bgVal])}`;
+                    const sqColorClass = `sq-${getColorSuffix(item[conf.boxVal])}`;
+                    const textValue = item[conf.text];
+                    
+                    html += `<td class="${bgClass}">
+                                <span class="sq-box ${sqColorClass}">■</span><span class="text-content">${textValue}</span>
+                             </td>`;
+                } else {
+                    html += `<td></td>`;
+                }
+            });
+            html += `</tr>`;
+        }
+        
+        html += `</tbody></table>`;
+        document.getElementById('pivot-container').innerHTML = html;
+    }
+
+    window.onload = renderTable;
+</script>
+
+</body>
+</html>
