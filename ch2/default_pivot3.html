@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>N-Depth 동적 피벗 테이블 (ES6 OOP 리팩토링)</title>
+<style>
+    /* CSS는 원본과 100% 동일하게 유지 */
+    body { font-family: 'Malgun Gothic', '맑은 고딕', dotum, sans-serif; font-size: 13px; padding: 20px; color: #333333; }
+    #pivot-container { width: 100%; overflow-x: auto; padding-bottom: 15px; }
+    table { border-collapse: collapse; width: 100%; min-width: 1000px; text-align: center; table-layout: fixed; border-top: 2px solid #5a7596; border-bottom: 1px solid #a3a3a3; }
+    th, td { border-right: 1px solid #dcdcdc; border-bottom: 1px solid #dcdcdc; padding: 6px 8px; vertical-align: middle; text-align: left; min-width: 90px; word-break: keep-all; }
+    th:first-child, td:first-child { border-left: 1px solid #dcdcdc; }
+    thead th { background: linear-gradient(to bottom, #ffffff 0%, #f1f1f1 100%); border-bottom: 1px solid #c5c5c5; font-weight: bold; color: #444444; text-align: center; }
+    .bg-green  { background-color: #92d050; }
+    .bg-yellow { background-color: #ffff99; }
+    .bg-red    { background-color: #ff9999; }
+    .bg-black  { background-color: #bfbfbf; }
+    .cell-wrapper { display: flex; align-items: flex-start; gap: 5px; cursor: pointer; }
+    .sq-box { flex-shrink: 0; font-size: 1.1em; margin-top: 2px; }
+    .sq-green  { color: #00b050; }
+    .sq-yellow { color: #ffc000; }
+    .sq-red    { color: #ff0000; }
+    .sq-black  { color: #595959; }
+    .text-content { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; white-space: normal; }
+</style>
+</head>
+<body>
+
+    <h2>장비 운용 및 편성 현황 (웹스퀘어 스타일 Dynamic Pivot)</h2>
+    <div id="pivot-container">로딩 중...</div>
+
+<script>
+    // ==========================================
+    // 1. 설정 및 Mock 데이터
+    // ==========================================
+    const mappingConfig = {
+        headerMerge: "Y",
+        cellMerge: "N",
+        headers: ['macode', 'mecode', 'sucode'],
+        total: 'totalrate',
+        text: 'equnm',
+        boxVal: 'orgrate',
+        bgVal: 'operate'
+    };
+
+    const dbData = [
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '105mm 곡사포', orgrate: 87, operate: 56 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '155mm 곡사포', orgrate: 96, operate: 55 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-55 자주포', orgrate: 49, operate: 71 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-9 자주포', orgrate: 69, operate: 52 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: '현궁', orgrate: 75, operate: 78 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: 'T-80U (텍스트가 길어져도 2줄 제한 및 말줄임표 처리됩니다)', orgrate: 45, operate: 90 },
+        { macode: '화력', mecode: '화력지원', sucode: '표적탐지', totalrate: null, equnm: null, orgrate: null, operate: null },
+        { macode: '화력', mecode: '화력지원', sucode: '화력통제', totalrate: 85, equnm: '현무', orgrate: 20, operate: 55 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-1', orgrate: 95, operate: 41 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 }, 
+        { macode: '기동', mecode: '전차', sucode: '전투지원용', totalrate: 97, equnm: '00구난전차', orgrate: 93, operate: 79 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '인원수송용(0000)', orgrate: 100, operate: 34 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '전투장갑차(X-0001)', orgrate: 72, operate: 95 },
+        { macode: '기동', mecode: '장갑차', sucode: '지휘통제용', totalrate: 80, equnm: '전투지뢰(K2)', orgrate: 23, operate: 52 }
+    ];
+
+    // ==========================================
+    // 2. 피벗 테이블 클래스 설계 (객체 지향 - SOLID 적용)
+    // ==========================================
+    class DynamicPivot {
+        constructor(containerId, config, data) {
+            this.container = document.getElementById(containerId);
+            this.config = config;
+            this.data = data;
+            
+            // 색상 판별 임계치 기준 (if-else 중첩 제거)
+            this.colorThresholds = [
+                { min: 90, color: 'green' },
+                { min: 75, color: 'yellow' },
+                { min: 50, color: 'red' },
+                { min: -Infinity, color: 'black' }
+            ];
+        }
+
+        // 유틸리티: 숫자에 따른 색상 문자열 반환
+        getColorSuffix(val) {
+            if (val === null || val === undefined || val === '') return '';
+            return this.colorThresholds.find(t => Number(val) >= t.min)?.color || 'black';
+        }
+
+        // 역할 1: 원본 데이터 파싱 및 2차원 그룹핑
+        parseData() {
+            const { headers, total, text } = this.config;
+            const columns = [];
+            const dataGroup = {};
+            let maxRows = 0;
+
+            this.data.forEach(item => {
+                const keys = headers.map(h => item[h] || '');
+                const colKey = keys.join('|');
+
+                if (!dataGroup[colKey]) {
+                    dataGroup[colKey] = [];
+                    columns.push({ colKey, keys, totalValue: item[total] });
+                }
+                
+                if (item[text]) {
+                    dataGroup[colKey].push(item);
+                }
+                maxRows = Math.max(maxRows, dataGroup[colKey].length);
+            });
+
+            return { columns, dataGroup, maxRows };
+        }
+
+        // 역할 2: 헤더 가로 병합(colspan) 계산 Matrix 생성
+        buildHeaderMatrix(columns) {
+            const { headers, headerMerge } = this.config;
+            const headerMatrix = Array.from({ length: headers.length }, () => []);
+
+            headers.forEach((_, depth) => {
+                let currentCell = null;
+
+                columns.forEach(col => {
+                    const text = col.keys[depth];
+                    const fullPath = col.keys.slice(0, depth + 1).join('|');
+
+                    if (headerMerge !== "Y" || !currentCell || currentCell.fullPath !== fullPath) {
+                        currentCell = { text, fullPath, colspan: 1 };
+                        headerMatrix[depth].push(currentCell);
+                    } else {
+                        currentCell.colspan++;
+                    }
+                });
+            });
+
+            return headerMatrix;
+        }
+
+        // 역할 3: 본문 Grid 모델 생성 및 세로 병합(rowspan) 처리
+        buildBodyGrid(columns, dataGroup, maxRows) {
+            const { text, boxVal, bgVal, cellMerge } = this.config;
+            const bodyGrid = Array.from({ length: maxRows }, () => []);
+
+            // Grid 초기화
+            for (let r = 0; r < maxRows; r++) {
+                columns.forEach((col, c) => {
+                    const item = dataGroup[col.colKey][r];
+                    bodyGrid[r][c] = item 
+                        ? { item, textValue: item[text], boxVal: item[boxVal], bgVal: item[bgVal], rowspan: 1, skip: false }
+                        : { empty: true, rowspan: 1, skip: false };
+                });
+            }
+
+            // rowspan 연산 로직 격리
+            if (cellMerge === "Y") {
+                this.applyRowspans(bodyGrid, columns.length, maxRows);
+            }
+
+            return bodyGrid;
+        }
+
+        // 내부 헬퍼: rowspan 적용 로직
+        applyRowspans(bodyGrid, colCount, rowCount) {
+            for (let c = 0; c < colCount; c++) {
+                let currentCell = null;
+                for (let r = 0; r < rowCount; r++) {
+                    const cell = bodyGrid[r][c];
+                    if (cell.empty) {
+                        currentCell = null;
+                        continue;
+                    }
+                    
+                    const isSameAsPrev = currentCell 
+                        && currentCell.textValue === cell.textValue 
+                        && currentCell.boxVal === cell.boxVal 
+                        && currentCell.bgVal === cell.bgVal;
+
+                    if (!isSameAsPrev) {
+                        currentCell = cell;
+                    } else {
+                        currentCell.rowspan++;
+                        cell.skip = true;
+                    }
+                }
+            }
+        }
+
+        // 역할 4: Header HTML 생성 (map/join 활용하여 코드 단축)
+        renderHeaderHTML(headerMatrix, columns) {
+            const theadRows = headerMatrix.map(row => `
+                <tr>
+                    ${row.map(cell => `<th colspan="${cell.colspan}">${cell.text}</th>`).join('')}
+                </tr>
+            `).join('');
+
+            const totalRow = this.config.total ? `
+                <tr>
+                    ${columns.map(col => {
+                        const bgClass = col.totalValue ? `bg-${this.getColorSuffix(col.totalValue)}` : '';
+                        return `<th class="${bgClass}">${col.totalValue || ''}</th>`;
+                    }).join('')}
+                </tr>
+            ` : '';
+
+            return `<thead>${theadRows}${totalRow}</thead>`;
+        }
+
+        // 역할 5: Body HTML 생성
+        renderBodyHTML(bodyGrid) {
+            return `<tbody>` + bodyGrid.map((row, r) => `
+                <tr>
+                    ${row.map((cell, c) => {
+                        if (cell.skip) return '';
+                        if (cell.empty) return `<td></td>`;
+
+                        const bgClass = `bg-${this.getColorSuffix(cell.bgVal)}`;
+                        const sqColorClass = `sq-${this.getColorSuffix(cell.boxVal)}`;
+                        const rowspanAttr = cell.rowspan > 1 ? `rowspan="${cell.rowspan}"` : '';
+
+                        return `
+                            <td class="${bgClass}" ${rowspanAttr} data-row="${r}" data-col="${c}">
+                                <div class="cell-wrapper">
+                                    <span class="sq-box ${sqColorClass}">■</span>
+                                    <span class="text-content" title="${cell.textValue}">${cell.textValue}</span>
+                                </div>
+                            </td>
+                        `;
+                    }).join('')}
+                </tr>
+            `).join('') + `</tbody>`;
+        }
+
+        // 역할 6: 이벤트 바인딩 (이벤트 위임 기법 유지 및 고도화)
+        bindEvents(bodyGrid) {
+            const tableEl = this.container.querySelector('table');
+            
+            tableEl.addEventListener('dblclick', (e) => {
+                const td = e.target.closest('td');
+                if (!td) return;
+
+                const rIdx = td.dataset.row;
+                const cIdx = td.dataset.col;
+
+                if (rIdx != null && cIdx != null) {
+                    const cellData = bodyGrid[rIdx][cIdx];
+                    const eventParams = {
+                        rowIndex: parseInt(rIdx, 10),
+                        colIndex: parseInt(cIdx, 10),
+                        rowspan: cellData.rowspan,
+                        rowData: cellData.item
+                    };
+
+                    console.log("[Pivot Cell DoubleClick Event]", eventParams);
+                    alert(`[더블클릭 이벤트 발생]\n` +
+                          `· rowIndex: ${eventParams.rowIndex}\n` +
+                          `· colIndex: ${eventParams.colIndex}\n` +
+                          `· 장비명: ${eventParams.rowData.equnm}\n` +
+                          `· operate: ${eventParams.rowData.operate}\n` +
+                          `· orgrate: ${eventParams.rowData.orgrate}`);
+                }
+            });
+        }
+
+        // 렌더링 파이프라인 조립
+        render() {
+            const { columns, dataGroup, maxRows } = this.parseData();
+            const headerMatrix = this.buildHeaderMatrix(columns);
+            const bodyGrid = this.buildBodyGrid(columns, dataGroup, maxRows);
+
+            const tableHtml = `
+                <table>
+                    ${this.renderHeaderHTML(headerMatrix, columns)}
+                    ${this.renderBodyHTML(bodyGrid)}
+                </table>
+            `;
+
+            this.container.innerHTML = tableHtml;
+            this.bindEvents(bodyGrid);
+        }
+    }
+
+    // ==========================================
+    // 3. 비동기 실행 환경 구성 (API Fetch를 가정한 async/await 구조 적용)
+    // ==========================================
+    async function loadDataAndRender() {
+        try {
+            // 실제 환경에서는 await fetch('/api/data') 를 수행하는 부분 (현재는 Promise 래핑으로 모의 처리)
+            const fetchMockData = () => new Promise(resolve => setTimeout(() => resolve(dbData), 300));
+            
+            const fetchedData = await fetchMockData();
+            
+            // 데이터 수신 후 피벗 테이블 인스턴스화 및 렌더링
+            const pivotTable = new DynamicPivot('pivot-container', mappingConfig, fetchedData);
+            pivotTable.render();
+
+        } catch (error) {
+            console.error("데이터 로드 및 렌더링 중 오류 발생:", error);
+            document.getElementById('pivot-container').innerHTML = `<p style="color:red">테이블을 불러오는 중 오류가 발생했습니다.</p>`;
+        }
+    }
+
+    // 페이지 로드 시 비동기 렌더링 함수 실행
+    window.addEventListener('DOMContentLoaded', loadDataAndRender);
+</script>
+
+</body>
+</html>
