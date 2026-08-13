@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Row Grouping & 50:50 Split Table</title>
+<style>
+    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 14px; padding: 20px; color: #000; }
+    table { 
+        border-collapse: collapse; 
+        width: 100%; 
+        min-width: 800px; 
+        text-align: center; 
+        table-layout: auto; 
+    }
+    
+    /* height: 1px 트릭: td 안의 div가 height: 100%를 가질 수 있도록 강제함 */
+    th, td { 
+        border: 1px solid #777; 
+        padding: 8px 10px; 
+        vertical-align: middle; 
+        text-align: center; 
+        height: 1px; 
+    }
+    th { background-color: #e7e6e6; font-weight: normal; }
+    .text-left { text-align: left; }
+
+    /* --- 50:50 반반 분할(Blue Circle)을 위한 핵심 CSS --- */
+    .split-cell {
+        padding: 0 !important; /* 기본 패딩을 없애 꽉 차게 만듦 */
+    }
+    .split-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 100%;
+    }
+    .split-item {
+        flex: 1; /* 높이를 무조건 균등하게 나눠 가짐 (2개면 50%씩) */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* 항목 사이의 가짜 테이블 테두리선 */
+    .split-item:not(:last-child) {
+        border-bottom: 1px solid #777;
+    }
+</style>
+</head>
+<body>
+
+    <div id="grid-container">로딩 중...</div>
+
+<script>
+    const mappingConfig = {
+        rowMerge: true,
+        columns: [
+            { key: 'cat1', name1: '대분류', name2: null, type: 'category', depth: 1 },
+            { key: 'cat2', name1: '중분류', name2: null, type: 'category', depth: 2 },
+            { key: 'cat3', name1: '소분류', name2: null, type: 'category', depth: 3 },
+            // 가운데 50:50 분할이 필요한 대상
+            { key: 'reviewA', name1: 'A검토', name2: 'B승인', type: 'balanced', depth: 4 },
+            { key: 'reviewJ', name1: 'J검토', name2: 'J승인', type: 'balanced', depth: 4 },
+            { key: 'eqName', name1: '장비', name2: null, type: 'data', depth: 5 },
+            { key: 'time', name1: '타격시간', name2: null, type: 'data', depth: 5 }
+        ]
+    };
+
+    const dbData = [
+        { cat1: '화력', cat2: '화포', cat3: '야포', reviewA: '검토완료', reviewJ: '검토완료', eqName: '105mm 곡사포', time: '2026-08-13 10:00' },
+        { cat1: '화력', cat2: '화포', cat3: '야포', reviewA: '검토완료', reviewJ: '검토완료', eqName: '155mm 곡사포', time: '2026-08-13 11:30' },
+        { cat1: '화력', cat2: '화포', cat3: '야포', reviewA: '검토완료', reviewJ: '검토완료', eqName: 'K-55 자주포', time: '2026-08-13 11:50' },
+        { cat1: '화력', cat2: '화포', cat3: '야포', reviewA: '승인완료', reviewJ: '승인완료', eqName: 'K-9 자주포', time: '2026-08-13 12:30' },
+        { cat1: '화력', cat2: '화포', cat3: '야포', reviewA: '승인완료', reviewJ: '승인완료', eqName: 'K-5 자주포', time: '2026-08-13 13:30' }
+    ];
+
+    class RowGroupGrid {
+        constructor(containerId, config, data) {
+            this.container = document.getElementById(containerId);
+            this.config = config;
+            this.data = data;
+        }
+
+        renderHeader() {
+            const tr1 = [], tr2 = [];
+            this.config.columns.forEach(col => {
+                if (col.name2) {
+                    tr1.push(`<th>${col.name1}</th>`);
+                    tr2.push(`<th>${col.name2}</th>`);
+                } else {
+                    tr1.push(`<th rowspan="2">${col.name1}</th>`);
+                }
+            });
+            return `<thead><tr>${tr1.join('')}</tr><tr>${tr2.join('')}</tr></thead>`;
+        }
+
+        renderBody() {
+            const cols = this.config.columns;
+            let grid = this.data.map(row => cols.map(col => ({
+                value: row[col.key], type: col.type, depth: col.depth, 
+                rowspan: 1, skip: false, parentPath: '', isSplit: false
+            })));
+
+            if (this.config.rowMerge) {
+                // 그룹화 범위 추출
+                let groups = [];
+                let startIdx = 0;
+                for (let i = 1; i <= grid.length; i++) {
+                    const prev = this.data[i - 1];
+                    const curr = this.data[i];
+                    const isGroupEnd = !curr || prev.cat1 !== curr.cat1 || prev.cat2 !== curr.cat2 || prev.cat3 !== curr.cat3;
+                    if (isGroupEnd) {
+                        groups.push({ start: startIdx, end: i - 1, count: i - startIdx });
+                        startIdx = i;
+                    }
+                }
+
+                for (let c = 0; c < cols.length; c++) {
+                    const colConfig = cols[c];
+
+                    // 1. 일반 카테고리 (계층형 rowspan 유지)
+                    if (colConfig.type === 'category') {
+                        let mergeTarget = null;
+                        for (let r = 0; r < grid.length; r++) {
+                            let cell = grid[r][c];
+                            let parentValues = [];
+                            for (let prevC = 0; prevC < c; prevC++) {
+                                if (cols[prevC].depth < cell.depth) parentValues.push(grid[r][prevC].value);
+                            }
+                            cell.parentPath = parentValues.join('|');
+
+                            if (mergeTarget && mergeTarget.value === cell.value && mergeTarget.parentPath === cell.parentPath) {
+                                mergeTarget.rowspan++;
+                                cell.skip = true;
+                            } else {
+                                mergeTarget = cell;
+                            }
+                        }
+                    } 
+                    // 2. 50:50 정밀 분할 컬럼 (CSS Flexbox 트릭 적용)
+                    else if (colConfig.type === 'balanced') {
+                        groups.forEach(group => {
+                            // 그룹 내의 유니크한 값(검토완료, 승인완료) 추출
+                            let uniqueValues = [];
+                            for (let r = group.start; r <= group.end; r++) {
+                                const val = grid[r][c].value;
+                                if (!uniqueValues.includes(val)) uniqueValues.push(val);
+                            }
+                            if (uniqueValues.length === 0) return;
+
+                            // CSS Flexbox를 활용해 내부에서 반반으로 쪼개는 HTML 문자열 생성
+                            const innerHtml = `<div class="split-container">` + 
+                                uniqueValues.map(val => `<div class="split-item">${val}</div>`).join('') +
+                                `</div>`;
+
+                            // 그룹의 첫 번째 셀에 전체 그룹 크기만큼 rowspan을 부여하고 내부 HTML 삽입
+                            let targetCell = grid[group.start][c];
+                            targetCell.value = innerHtml;
+                            targetCell.rowspan = group.count; // 5칸 통째로 병합
+                            targetCell.skip = false;
+                            targetCell.isSplit = true; // 패딩 제거 클래스 적용을 위한 플래그
+
+                            // 나머지 하위 셀들은 모두 스킵 처리
+                            for (let r = group.start + 1; r <= group.end; r++) {
+                                grid[r][c].skip = true;
+                            }
+                        });
+                    }
+                }
+            }
+
+            const tbodyHtml = grid.map(rowCells => {
+                const tds = rowCells.map((cell, c) => {
+                    if (cell.skip) return '';
+                    const rowspanAttr = cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : '';
+                    
+                    // 정렬 및 커스텀 클래스 적용
+                    let classes = [];
+                    if (c === 5) classes.push('text-left'); // 장비 컬럼 좌측 정렬
+                    if (cell.isSplit) classes.push('split-cell'); // 분할 셀 패딩 제거
+
+                    const classAttr = classes.length > 0 ? ` class="${classes.join(' ')}"` : '';
+                    return `<td${classAttr}${rowspanAttr}>${cell.value}</td>`;
+                }).join('');
+                return `<tr>${tds}</tr>`;
+            }).join('');
+
+            return `<tbody>${tbodyHtml}</tbody>`;
+        }
+
+        render() {
+            this.container.innerHTML = `<table>${this.renderHeader()}${this.renderBody()}</table>`;
+        }
+    }
+
+    const dataGrid = new RowGroupGrid('grid-container', mappingConfig, dbData);
+    dataGrid.render();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>N-Depth 동적 피벗 테이블 (ES6 OOP 병합 기능 고도화)</title>
+<style>
+    body { font-family: 'Malgun Gothic', '맑은 고딕', dotum, sans-serif; font-size: 13px; padding: 20px; color: #333333; }
+    #pivot-container { width: 100%; overflow-x: auto; padding-bottom: 15px; }
+    table { border-collapse: collapse; width: 100%; min-width: 1000px; text-align: center; table-layout: fixed; border-top: 2px solid #5a7596; border-bottom: 1px solid #a3a3a3; }
+    th, td { border-right: 1px solid #dcdcdc; border-bottom: 1px solid #dcdcdc; padding: 6px 8px; vertical-align: middle; text-align: left; min-width: 90px; word-break: keep-all; }
+    th:first-child, td:first-child { border-left: 1px solid #dcdcdc; }
+    thead th { background: linear-gradient(to bottom, #ffffff 0%, #f1f1f1 100%); border-bottom: 1px solid #c5c5c5; font-weight: bold; color: #444444; text-align: center; }
+    .bg-green  { background-color: #92d050; }
+    .bg-yellow { background-color: #ffff99; }
+    .bg-red    { background-color: #ff9999; }
+    .bg-black  { background-color: #bfbfbf; }
+    .cell-wrapper { display: flex; align-items: flex-start; gap: 5px; cursor: pointer; }
+    .sq-box { flex-shrink: 0; font-size: 1.1em; margin-top: 2px; }
+    .sq-green  { color: #00b050; }
+    .sq-yellow { color: #ffc000; }
+    .sq-red    { color: #ff0000; }
+    .sq-black  { color: #595959; }
+    .text-content { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; white-space: normal; }
+</style>
+</head>
+<body>
+
+    <h2>장비 운용 및 편성 현황 (Dynamic Merge Pivot)</h2>
+    <div id="pivot-container">로딩 중...</div>
+
+<script>
+    // ==========================================
+    // 1. 설정 및 Mock 데이터
+    // ==========================================
+    const mappingConfig = {
+        // 'N', 'headerRowMerge', 'headerColMerge', 'headerRowColMerge' (기존 Y는 headerRowColMerge와 호환 유지)
+        headerMerge: "headerRowColMerge", 
+        // 'N', 'cellRowMerge', 'cellColMerge', 'cellRowColMerge' (기존 Y는 cellRowMerge와 호환 유지)
+        cellMerge: "N",     
+        headers: ['macode', 'mecode', 'sucode'],
+        total: 'totalrate',
+        text: 'equnm',
+        boxVal: 'orgrate',
+        bgVal: 'operate'
+    };
+
+    const dbData = [
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '105mm 곡사포', orgrate: 87, operate: 56 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: '155mm 곡사포', orgrate: 96, operate: 55 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-55 자주포', orgrate: 49, operate: 71 },
+        { macode: '화력', mecode: '화포', sucode: '야포', totalrate: 81, equnm: 'K-9 자주포', orgrate: 69, operate: 52 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: '현궁', orgrate: 75, operate: 78 },
+        { macode: '화력', mecode: '대전차화기', sucode: '대전차유도무기', totalrate: 94, equnm: 'T-80U (텍스트가 길어져도 2줄 제한 및 말줄임표 처리됩니다)', orgrate: 45, operate: 90 },
+        { macode: '화력', mecode: '화력지원', sucode: '표적탐지', totalrate: null, equnm: null, orgrate: null, operate: null },
+        { macode: '화력', mecode: '화력지원', sucode: '화력통제', totalrate: 85, equnm: '현무', orgrate: 20, operate: 55 },
+        { macode: '화력', mecode: '화력지원', sucode: '화력통제', totalrate: 85, equnm: '현무2', orgrate: 20, operate: 55 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-1', orgrate: 95, operate: 41 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 },
+        { macode: '기동', mecode: '전차', sucode: '전투용', totalrate: 70, equnm: 'K-2', orgrate: 64, operate: 79 }, 
+        { macode: '기동', mecode: '전차', sucode: '전투지원용', totalrate: 97, equnm: '00구난전차', orgrate: 93, operate: 79 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '인원수송용(0000)', orgrate: 100, operate: 34 },
+        { macode: '기동', mecode: '장갑차', sucode: '전투용', totalrate: 45, equnm: '전투장갑차(X-0001)', orgrate: 72, operate: 95 },
+        { macode: '기동', mecode: '장갑차', sucode: '지휘통제용', totalrate: 80, equnm: '전투지뢰(K2)', orgrate: 23, operate: 52 }
+    ];
+
+    // ==========================================
+    // 2. 피벗 테이블 클래스 
+    // ==========================================
+    class DynamicPivot {
+        constructor(containerId, config, data) {
+            this.container = document.getElementById(containerId);
+            this.config = config;
+            this.data = data;
+            
+            this.colorThresholds = [
+                { min: 90, color: 'green' },
+                { min: 75, color: 'yellow' },
+                { min: 50, color: 'red' },
+                { min: -Infinity, color: 'black' }
+            ];
+        }
+
+        getColorSuffix(val) {
+            if (val === null || val === undefined || val === '') return '';
+            return this.colorThresholds.find(t => Number(val) >= t.min)?.color || 'black';
+        }
+
+        // 역할 1: 원본 데이터 파싱 및 2차원 그룹핑
+        parseData() {
+            const { headers, total, text } = this.config;
+            const columns = [];
+            const dataGroup = {};
+            let maxRows = 0;
+
+            this.data.forEach(item => {
+                const keys = headers.map(h => item[h] || '');
+                const colKey = keys.join('|');
+
+                if (!dataGroup[colKey]) {
+                    dataGroup[colKey] = [];
+                    columns.push({ colKey, keys, totalValue: item[total] });
+                }
+                
+                if (item[text]) {
+                    dataGroup[colKey].push(item);
+                }
+                maxRows = Math.max(maxRows, dataGroup[colKey].length);
+            });
+
+            return { columns, dataGroup, maxRows };
+        }
+
+        // 역할 2: 헤더 Matrix 생성 및 고도화된 병합(Merge) 처리
+        buildHeaderMatrix(columns) {
+            const { headers, headerMerge } = this.config;
+            const hMerge = headerMerge || "N";
+            
+            const isColMerge = ["headerColMerge", "headerRowColMerge", "Y"].includes(hMerge); // 좌우 병합
+            const isRowMerge = ["headerRowMerge", "headerRowColMerge", "Y"].includes(hMerge); // 상하 병합
+
+            const grid = Array.from({ length: headers.length }, () => []);
+
+            // 1. Grid 초기 세팅
+            for (let r = 0; r < headers.length; r++) {
+                for (let c = 0; c < columns.length; c++) {
+                    grid[r][c] = {
+                        text: columns[c].keys[r],
+                        // 상위 부모 식별 경로 (부모가 다르면 병합하지 않도록 방어)
+                        parentPath: r > 0 ? columns[c].keys.slice(0, r).join('|') : 'root',
+                        colspan: 1,
+                        rowspan: 1,
+                        skip: false
+                    };
+                }
+            }
+
+            // 2. 가로(Col) 병합 - colspan 처리
+            if (isColMerge) {
+                for (let r = 0; r < headers.length; r++) {
+                    let mergeTarget = null;
+                    for (let c = 0; c < columns.length; c++) {
+                        let cell = grid[r][c];
+                        // 텍스트가 동일하고, "직계 부모"가 같을 때만 자식끼리 묶음
+                        if (mergeTarget && mergeTarget.text === cell.text && mergeTarget.parentPath === cell.parentPath) {
+                            mergeTarget.colspan++;
+                            cell.skip = true;
+                        } else {
+                            mergeTarget = cell;
+                        }
+                    }
+                }
+            }
+
+            // 3. 세로(Row) 병합 - rowspan 처리
+            if (isRowMerge) {
+                for (let c = 0; c < columns.length; c++) {
+                    let mergeTarget = null;
+                    for (let r = 0; r < headers.length; r++) {
+                        let cell = grid[r][c];
+                        if (cell.skip) continue; 
+
+                        // 상하 병합 시, 병합된 그룹의 넓이(colspan)가 동일해야 그리드가 깨지지 않음
+                        if (mergeTarget && mergeTarget.text === cell.text && mergeTarget.colspan === cell.colspan) {
+                            mergeTarget.rowspan++;
+                            cell.skip = true;
+                        } else {
+                            mergeTarget = cell;
+                        }
+                    }
+                }
+            }
+
+            return grid;
+        }
+
+        // 역할 3: 본문 Body 생성 및 데이터/부모 식별 병합(Merge) 처리
+        buildBodyGrid(columns, dataGroup, maxRows) {
+            const { text, boxVal, bgVal, cellMerge } = this.config;
+            const cMerge = cellMerge || "N";
+
+            const isColMerge = ["cellColMerge", "cellRowColMerge"].includes(cMerge); // 좌우 병합
+            const isRowMerge = ["cellRowMerge", "cellRowColMerge", "Y"].includes(cMerge); // 상하 병합
+
+            const grid = Array.from({ length: maxRows }, () => []);
+
+            // 1. Grid 초기 세팅
+            for (let r = 0; r < maxRows; r++) {
+                for (let c = 0; c < columns.length; c++) {
+                    const item = dataGroup[columns[c].colKey][r];
+                    grid[r][c] = item 
+                        ? { 
+                            item, 
+                            textValue: item[text], 
+                            boxVal: item[boxVal], 
+                            bgVal: item[bgVal], 
+                            // Body 셀의 부모 = 말단 뎁스를 제외한 Column 계층 경로 (예: macode|mecode)
+                            parentPath: columns[c].keys.slice(0, -1).join('|'), 
+                            colspan: 1, 
+                            rowspan: 1, 
+                            skip: false, 
+                            empty: false 
+                        }
+                        : { empty: true, colspan: 1, rowspan: 1, skip: false };
+                }
+            }
+
+            // 2. 가로(Col) 병합 - colspan 처리
+            if (isColMerge) {
+                for (let r = 0; r < maxRows; r++) {
+                    let mergeTarget = null;
+                    for (let c = 0; c < columns.length; c++) {
+                        let cell = grid[r][c];
+                        if (cell.empty) { mergeTarget = null; continue; }
+                        
+                        const isSameData = mergeTarget 
+                            && mergeTarget.textValue === cell.textValue 
+                            && mergeTarget.boxVal === cell.boxVal 
+                            && mergeTarget.bgVal === cell.bgVal;
+                            
+                        // 핵심: 데이터가 같아도 상위 부모 계층이 다르면 병합하지 않음
+                        const isSameParent = mergeTarget && mergeTarget.parentPath === cell.parentPath;
+
+                        if (isSameData && isSameParent) {
+                            mergeTarget.colspan++;
+                            cell.skip = true;
+                        } else {
+                            mergeTarget = cell;
+                        }
+                    }
+                }
+            }
+
+            // 3. 세로(Row) 병합 - rowspan 처리
+            if (isRowMerge) {
+                for (let c = 0; c < columns.length; c++) {
+                    let mergeTarget = null;
+                    for (let r = 0; r < maxRows; r++) {
+                        let cell = grid[r][c];
+                        // empty거나 이미 가로병합으로 스킵된 셀 무시
+                        if (cell.empty || cell.skip) { 
+                            mergeTarget = null; 
+                            continue; 
+                        }
+                        
+                        const isSameData = mergeTarget 
+                            && mergeTarget.textValue === cell.textValue 
+                            && mergeTarget.boxVal === cell.boxVal 
+                            && mergeTarget.bgVal === cell.bgVal;
+
+                        // 상하 병합 시에도 가로(colspan) 묶음 크기가 같아야 함
+                        const isSameColspan = mergeTarget && mergeTarget.colspan === cell.colspan;
+
+                        // 동일 컬럼 내에서의 세로 병합이므로 부모(parentPath)는 언제나 같아 추가 체크가 필요 없음
+                        if (isSameData && isSameColspan) {
+                            mergeTarget.rowspan++;
+                            cell.skip = true;
+                        } else {
+                            mergeTarget = cell;
+                        }
+                    }
+                }
+            }
+
+            return grid;
+        }
+
+        // 역할 4: Header HTML 생성
+        renderHeaderHTML(headerMatrix, columns) {
+            const theadRows = headerMatrix.map(row => `
+                <tr>
+                    ${row.map(cell => {
+                        if (cell.skip) return '';
+                        const colspanAttr = cell.colspan > 1 ? ` colspan="${cell.colspan}"` : '';
+                        const rowspanAttr = cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : '';
+                        return `<th${colspanAttr}${rowspanAttr}>${cell.text}</th>`;
+                    }).join('')}
+                </tr>
+            `).join('');
+
+            const totalRow = this.config.total ? `
+                <tr>
+                    ${columns.map(col => {
+                        const bgClass = col.totalValue ? `bg-${this.getColorSuffix(col.totalValue)}` : '';
+                        return `<th class="${bgClass}">${col.totalValue || ''}</th>`;
+                    }).join('')}
+                </tr>
+            ` : '';
+
+            return `<thead>${theadRows}${totalRow}</thead>`;
+        }
+
+        // 역할 5: Body HTML 생성
+        renderBodyHTML(bodyGrid) {
+            return `<tbody>` + bodyGrid.map((row, r) => `
+                <tr>
+                    ${row.map((cell, c) => {
+                        if (cell.skip) return '';
+                        if (cell.empty) return `<td></td>`;
+
+                        const bgClass = `bg-${this.getColorSuffix(cell.bgVal)}`;
+                        const sqColorClass = `sq-${this.getColorSuffix(cell.boxVal)}`;
+                        
+                        // 병합 속성 동적 바인딩
+                        const colspanAttr = cell.colspan > 1 ? ` colspan="${cell.colspan}"` : '';
+                        const rowspanAttr = cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : '';
+
+                        return `
+                            <td class="${bgClass}"${colspanAttr}${rowspanAttr} data-row="${r}" data-col="${c}">
+                                <div class="cell-wrapper">
+                                    <span class="sq-box ${sqColorClass}">■</span>
+                                    <span class="text-content" title="${cell.textValue}">${cell.textValue}</span>
+                                </div>
+                            </td>
+                        `;
+                    }).join('')}
+                </tr>
+            `).join('') + `</tbody>`;
+        }
+
+        // 역할 6: 이벤트 바인딩
+        bindEvents(bodyGrid) {
+            const tableEl = this.container.querySelector('table');
+            
+            tableEl.addEventListener('dblclick', (e) => {
+                const td = e.target.closest('td');
+                if (!td) return;
+
+                const rIdx = td.dataset.row;
+                const cIdx = td.dataset.col;
+
+                if (rIdx != null && cIdx != null) {
+                    const cellData = bodyGrid[rIdx][cIdx];
+                    const eventParams = {
+                        rowIndex: parseInt(rIdx, 10),
+                        colIndex: parseInt(cIdx, 10),
+                        rowspan: cellData.rowspan,
+                        colspan: cellData.colspan,
+                        rowData: cellData.item
+                    };
+
+                    console.log("[Pivot Cell DoubleClick Event]", eventParams);
+                    alert(`[더블클릭 이벤트 발생]\n` +
+                          `· 장비명: ${eventParams.rowData.equnm}\n` +
+                          `· 병합상태: 가로 ${eventParams.colspan}칸 / 세로 ${eventParams.rowspan}칸\n` +
+                          `· operate: ${eventParams.rowData.operate}\n` +
+                          `· orgrate: ${eventParams.rowData.orgrate}`);
+                }
+            });
+        }
+
+        render() {
+            const { columns, dataGroup, maxRows } = this.parseData();
+            const headerMatrix = this.buildHeaderMatrix(columns);
+            const bodyGrid = this.buildBodyGrid(columns, dataGroup, maxRows);
+
+            const tableHtml = `
+                <table>
+                    ${this.renderHeaderHTML(headerMatrix, columns)}
+                    ${this.renderBodyHTML(bodyGrid)}
+                </table>
+            `;
+
+            this.container.innerHTML = tableHtml;
+            this.bindEvents(bodyGrid);
+        }
+    }
+
+    // ==========================================
+    // 3. 비동기 실행 환경 구성
+    // ==========================================
+    async function loadDataAndRender() {
+        try {
+            const fetchMockData = () => new Promise(resolve => setTimeout(() => resolve(dbData), 300));
+            const fetchedData = await fetchMockData();
+            
+            const pivotTable = new DynamicPivot('pivot-container', mappingConfig, fetchedData);
+            pivotTable.render();
+        } catch (error) {
+            console.error("데이터 로드 중 오류 발생:", error);
+            document.getElementById('pivot-container').innerHTML = `<p style="color:red">오류가 발생했습니다.</p>`;
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadDataAndRender);
+</script>
+
+</body>
+</html>
