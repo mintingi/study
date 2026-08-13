@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>군 작전 상황도 - 전체 화면 캔버스 (백분율 표시 영역 텍스트화)</title>
+<style>
+  /* ----------------------------------------------------
+     [ CSS 영역 ] - 기본 및 레이아웃
+  ----------------------------------------------------- */
+  body { 
+    font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; 
+    background-color: #f0f2f6; 
+    margin: 0; padding: 0;
+    height: 100vh; overflow: hidden;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+  .app-container { 
+    width: 100%; 
+    height: 100vh; 
+    display: flex; 
+    flex-direction: column; 
+    box-sizing: border-box;
+  }
+  
+  .top-controls { 
+    padding: 15px 30px; 
+    border-bottom: 1px solid #dee2e6; 
+    background: #fff; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    z-index: 40000;
+    flex-shrink: 0; 
+  }
+  .controls-group { display: flex; gap: 10px; align-items: center; }
+  
+  #canvas-area {
+    position: relative; 
+    flex: 1; 
+    overflow: auto; 
+    background-color: #ffffff; 
+    width: 500px;
+    height: 500px;
+  }
+
+  .canvas-item { position: absolute !important; cursor: grab; user-select: none; }
+  .canvas-item:active { cursor: grabbing; }
+
+  /* ----------------------------------------------------
+     사령부 박스 및 군단 박스 스타일
+  ----------------------------------------------------- */
+  .army-box {
+    background: #ffffaa; border: 1px solid #999; position: absolute;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 15px; box-sizing: border-box; box-shadow: 2px 2px 5px rgba(0,0,0,0.03); z-index: 50;
+  }
+  .army-box-header {
+    display: flex; justify-content: space-between; align-items: center; gap: 15px;
+    width: 90%; border-bottom: 1px solid #999; padding-bottom: 10px; margin-bottom: 15px;
+  }
+  .army-box .box-title-input {
+    flex: 1; 
+    background: #fff; border: 1px solid #333; padding: 5px 10px;
+    font-size: 18px; font-weight: bold; color: #000; text-align: center;
+    outline: none; transition: 0.2s; min-width: 0;
+  }
+  .army-box .box-title-input:focus {
+    border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.25);
+  }
+
+  .corps-box {
+    background: #f8f9fa; border: 1px solid #999; position: absolute;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 15px; box-sizing: border-box; box-shadow: 2px 2px 5px rgba(0,0,0,0.03); z-index: 100;
+  }
+  .corps-box-header { 
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; 
+    width: 90%; border-bottom: 1px solid #999; padding-bottom: 10px; margin-bottom: 15px;
+  }
+  .corps-box .box-title-input {
+    flex: 1; 
+    background: #fff; border: 1px solid #6c757d; padding: 4px 8px;
+    font-size: 14px; font-weight: bold; color: #000; text-align: center;
+    outline: none; transition: 0.2s; min-width: 0;
+  }
+  .corps-box .box-title-input:focus {
+    border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.25);
+  }
+
+  .header-right-group {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+
+  /* 💡 수정됨: input 태그 스타일을 지우고 시각적으로 사령부/군단 헤더 글자와 어우러지도록 정돈 */
+  .box-percent-area { 
+    font-weight: bold; 
+    font-size: 16px; 
+    display: flex; 
+    align-items: center; 
+    gap: 5px; 
+    white-space: nowrap;
+    color: #212529;
+  }
+  .percent-text {
+    font-weight: bold;
+    font-size: 16px;
+    color: #000;
+    min-width: 25px;
+    text-align: right;
+    display: inline-block;
+  }
+
+  /* ----------------------------------------------------
+     컴포넌트, 핸들, 마커 등
+  ----------------------------------------------------- */
+  .box-resize-handle {
+    position: absolute; bottom: 0; right: 0; width: 20px; height: 20px;
+    background: linear-gradient(135deg, transparent 50%, #999 50%); cursor: se-resize; z-index: 1001;
+  }
+  .box-resize-handle:hover { background: linear-gradient(135deg, transparent 50%, #555 50%); }
+
+  .resize-handle { display: flex; align-items: center; justify-content: center; z-index: 1001; cursor: crosshair; position: absolute; padding: 5px; }
+  .x-mark { width: 14px; height: 14px; position: relative; margin: -1.5px; }
+  .x-mark::before, .x-mark::after { content: ''; position: absolute; width: 16px; height: 3.5px; background: #888; top: 5px; left: -1px; border-radius: 1px; }
+  .x-mark::before { transform: rotate(45deg); }
+  .x-mark::after { transform: rotate(-45deg); }
+  
+  .divider { width: 30px; height: 250px; display: flex; justify-content: center;}
+  .divider-line { border-left: 4px dashed #888; height: 100%; pointer-events: none; }
+  .divider .resize-handle { flex-direction: column; left: 50%; transform: translateX(-50%); }
+  .divider .top { top: -30px; cursor: n-resize;}
+  .divider .bottom { bottom: -30px; cursor: n-resize;}
+  
+  .divider-horizontal { width: 250px; height: 30px; display: flex; align-items: center;}
+  .divider-line-h { border-top: 4px dashed #888; width: 100%; pointer-events: none; }
+  .divider-horizontal .resize-handle { flex-direction: row; top: 50%; transform: translateY(-50%); }
+  .divider-horizontal .left { left: -30px; cursor: ew-resize;}
+  .divider-horizontal .right { right: -30px; cursor: ew-resize;}
+
+  .badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: white; font-size: 11px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .bg-b { background-color: #6c757d; }
+  .bg-g { background-color: #198754; } .bg-a { background-color: #ffc107; color: #000; }
+  .bg-r { background-color: #dc3545; }
+  
+  .unit-wrapper { width: 64px; height: 64px; display: inline-flex; align-items: center; justify-content: center; cursor: grab; user-select: none; pointer-events: auto;}
+  .unit-wrapper > * { pointer-events: none !important; }
+  .unit-circle { position: absolute; width: 100%; height: 100%; border-radius: 50%; box-sizing: border-box; }
+  .unit-symbol { width: 32px; height: 20px; background-color: #92c5e6; border: 1px solid #000; position: relative; display: flex; align-items: center; justify-content: center; z-index: 2; }
+  .unit-symbol.infantry::after { content: 'X'; font-size: 14px; font-weight: normal; color: #000; }
+  .unit-symbol.armor::after { content: ''; width: 12px; height: 8px; border: 1px solid #000; border-radius: 50%; }
+  .unit-symbol.custom-icon { background: none; border: none; }
+  .unit-size, .unit-id, .unit-percent, .unit-badge { position: absolute; z-index: 3; font-weight: bold; color: #212529; }
+  .unit-size { top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; }
+  .unit-id { left: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; }
+  .unit-percent { bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #495057; }
+  .unit-badge { top: 10px; right: 0px; z-index: 4; }
+
+  .c-pink { border: 2px solid #d63384; } .c-orange { border: 2px solid #fd7e14; }
+  .c-blue { border: 2px solid #0d6efd; } .c-red-dash { border: 2px dashed #dc3545; }
+
+  .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: 0.2s; display: flex; align-items: center; justify-content: center;}
+  .btn-primary { background: #0d6efd; color: white; } .btn-primary:hover { background: #0b5ed7; }
+  .btn-secondary { background: #6c757d; color: white; } .btn-secondary:hover { background: #5a6268; }
+  .btn-action { background: #2255a4; color: white; } .btn-action:hover { background: #153e7e; }
+
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100000; display: none; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal-content { background: #fff; width: 450px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header { padding: 15px 20px; background: #f8f9fa; font-weight: bold; font-size: 16px; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; }
+  .modal-body { padding: 0; max-height: 400px; overflow-y: auto; }
+  .modal-footer { padding: 15px 20px; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 10px; }
+  .list-item { display: flex; align-items: center; gap: 15px; padding: 10px 20px; border-bottom: 1px solid #f1f3f5; cursor: pointer; }
+  .list-item:hover { background: #e9ecef; }
+  .list-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  .list-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .list-name { font-size: 14px; font-weight: bold; color: #343a40; }
+  .preview-wrap { transform: scale(0.7); transform-origin: center right; }
+
+  .unit-tooltip {
+    position: fixed; background: rgba(255, 255, 255, 0.85); border: 2px solid #888; border-radius: 4px;
+    font-size: 13px; color: #212529; pointer-events: none; z-index: 1000000; display: none;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.2); overflow: hidden;
+  }
+  .unit-tooltip table { border-collapse: collapse; margin: 0; width: 100%; }
+  .unit-tooltip th, .unit-tooltip td { border: 1px solid #aaa; padding: 6px 12px; }
+  .unit-tooltip th { background: rgba(230, 230, 230, 0.85); font-weight: normal; text-align: center; white-space: nowrap; }
+  .unit-tooltip td { background: rgba(245, 245, 245, 0.85); }
+
+  .custom-context-menu {
+    position: fixed; z-index: 2000000; display: none; background: #e9ecef; border: 1px solid #adb5bd;
+    border-radius: 2px; box-shadow: 3px 3px 10px rgba(0,0,0,0.2); font-size: 14px; user-select: none;
+    width: 140px; padding: 0; margin: 0;
+  }
+  .context-menu-item {
+    padding: 8px 14px; cursor: pointer; border-bottom: 1px solid #adb5bd;
+    display: flex; justify-content: space-between; align-items: center; position: relative;
+    background: #f8f9fa; color: #333;
+  }
+  .context-menu-item:last-child { border-bottom: none; }
+  .context-menu-item:hover { background: #e9ecef; }
+  .context-menu-item.disabled { color: #adb5bd; cursor: not-allowed; }
+  .context-menu-item.disabled:hover { background: #f8f9fa; }
+  .context-sub-menu {
+    position: absolute; left: 100%; top: -1px; display: none; background: #e9ecef; border: 1px solid #adb5bd;
+    border-radius: 2px; box-shadow: 3px 3px 10px rgba(0,0,0,0.1); width: 120px;
+  }
+  .context-menu-item.has-submenu:hover > .context-sub-menu { display: block; }
+
+  /* 인풋 모달창 및 이력 테이블 */
+  .form-group { padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .form-control { padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; outline: none; }
+  .form-control:focus { border-color: #0d6efd; }
+  
+  .history-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .history-table th, .history-table td { padding: 12px; border-bottom: 1px solid #dee2e6; text-align: left; }
+  .history-table th { background-color: #f8f9fa; font-weight: bold; }
+  .history-table tr { cursor: pointer; }
+  .history-table tr:hover { background-color: #f1f3f5; }
+  .history-table tr.selected { background-color: #e7f5ff !important; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="top-controls">
+    <div class="controls-group">
+      <button id="btn-open-modal" class="btn btn-primary">+ 부대마커 추가</button>
+      <button id="btn-new-board" class="btn btn-action">신규</button>
+      <button id="btn-save-board" class="btn btn-action">저장</button>
+      <button id="btn-history-board" class="btn btn-action">이력목록</button>
+    </div>
+  </div>
+  <div id="canvas-group" style="display: flex;">
+    <div style="width:100px; background: #c1c1c1;">Left</div>
+    <div id="canvas-area" style="flex: 1;"></div>
+    <div style="width: 100px; background: #92c5e6;">Right</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="add-unit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span>추가할 부대 선택</span>
+      <button class="btn btn-secondary" id="btn-close-modal" style="padding: 2px 8px;">X</button>
+    </div>
+    <div class="modal-body" id="modal-unit-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-cancel-modal">취소</button>
+      <button class="btn btn-primary" id="btn-apply-add">선택 항목 추가</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="save-title-modal">
+  <div class="modal-content" style="width: 380px;">
+    <div class="modal-header"><span>작전 상황도 저장</span></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label style="font-size:13px; font-weight:bold;">저장 제목</label>
+        <input type="text" id="save-input-title" class="form-control" placeholder="제목을 입력하세요.">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-close-save-modal">취소</button>
+      <button class="btn btn-primary" id="btn-confirm-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="history-list-modal">
+  <div class="modal-content" style="width: 550px;">
+    <div class="modal-header"><span>저장 이력 목록</span></div>
+    <div class="modal-body" style="padding: 0; max-height: 300px;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th style="width: 60%;">제목</th>
+            <th style="width: 40%;">저장시간</th>
+          </tr>
+        </thead>
+        <tbody id="history-table-body">
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-load-history">불러오기</button>
+      <button class="btn btn-secondary" id="btn-close-history-modal">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-context-menu" id="custom-context-menu">
+  <div class="context-menu-item" id="menu-add-unit">부대추가</div>
+  <div class="context-menu-item has-submenu">
+    박스 <span>&gt;</span>
+    <div class="context-sub-menu" id="sub-menu-box"></div>
+  </div>
+  <div class="context-menu-item has-submenu">
+    선 <span>&gt;</span>
+    <div class="context-sub-menu">
+      <div class="context-menu-item" data-action="divider">세로선</div>
+      <div class="context-menu-item" data-action="divider-horizontal">가로선</div>
+    </div>
+  </div>
+  <div class="context-menu-item disabled" id="menu-delete-item">삭제</div>
+</div>
+
+<script>
+/**
+ * ---------------------------------------------------------------------------
+ * [ Config ] 환경설정 매핑
+ * ---------------------------------------------------------------------------
+ */
+const CONFIG = {
+  USE_ARMY_BOX: true, 
+  UNITS: [
+    { id: 'u1', name: '제9보병사단', size: 'XX', unitId: '9', type: 'infantry', badge: 'G', percent: '95%', border: '' },
+    { id: 'u2', name: '제15기갑여단', size: 'X', unitId: '15', type: 'armor', badge: 'A', percent: '80%', border: 'c-red-dash' },
+    { id: 'u3', name: '제3해상함대', size: 'XX', unitId: '3', type: 'ship', badge: 'G', percent: '100%', border: 'c-blue' },
+    { id: 'u4', name: '제1전투비행단', size: 'X', unitId: '1', type: 'plane', badge: 'R', percent: '60%', border: 'c-orange' },
+    { id: 'u5', name: '제8기동사단', size: 'XX', unitId: '8', type: 'armor', badge: 'B', percent: '40%', border: '' },
+    { id: 'u6', name: '제11기동사단', size: 'XX', unitId: '11', type: 'armor', badge: 'G', percent: '100%', border: 'c-pink' },
+    { id: 'u7', name: '제7보병사단', size: 'XX', unitId: '7', type: 'infantry', badge: 'B', percent: '30%', border: '' },
+    { id: 'u8', name: '제5기갑사단', size: 'XX', unitId: '5', type: 'armor', badge: 'R', percent: '60%', border: 'c-blue' }
+  ],
+  Z_INDEX: { army: 50, box: 1000, unit: 2000, line: 3000 },
+  MENU_TEMPLATES: {
+    // 💡 동적 메뉴 생성 시에도 퍼센트 영역 구조를 span 형태로 통일 매핑
+    'army-box': {
+      width: 400, height: 280,
+      html: `<div class="army-box-header"><input type="text" class="box-title-input" value="OO 사령부"><div class="header-right-group"><div class="box-percent-area"><span class="percent-text">0</span> %</div><div class="badge bg-b">B</div></div></div><div class="box-resize-handle"></div>`
+    },
+    'corps-box': {
+      width: 250, height: 180,
+      html: `<div class="corps-box-header"><input type="text" class="box-title-input" value="OO 군단"><div class="header-right-group"><div class="box-percent-area"><span class="percent-text">0</span> %</div><div class="badge bg-b">B</div></div></div><div class="box-resize-handle"></div>`
+    },
+    'divider': {
+      width: 30, height: 250,
+      html: `<div class="resize-handle top"><div class="x-mark"></div><div class="x-mark"></div></div><div class="divider-line"></div><div class="resize-handle bottom"><div class="x-mark"></div><div class="x-mark"></div></div>`
+    },
+    'divider-horizontal': {
+      width: 250, height: 30,
+      html: `<div class="resize-handle left"><div class="x-mark"></div><div class="x-mark"></div></div><div class="divider-line-h"></div><div class="resize-handle right"><div class="x-mark"></div><div class="x-mark"></div></div>`
+    }
+  }
+};
+
+/**
+ * ---------------------------------------------------------------------------
+ * [ Utils ] 공통 DOM 유틸리티
+ * ---------------------------------------------------------------------------
+ */
+class DOMUtils {
+  static getContainedChildren(parentRect, childrenNodes) {
+    return Array.from(childrenNodes).filter(child => {
+      const rect = child.getBoundingClientRect();
+      if (rect.left === 0 && rect.top === 0) return false;
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      return cx >= parentRect.left && cx <= parentRect.right && cy >= parentRect.top && cy <= parentRect.bottom;
+    });
+  }
+
+  static generateUnitHTML(data) {
+    const symbolMap = {
+      'infantry': `<div class="unit-symbol infantry"></div>`,
+      'armor': `<div class="unit-symbol armor"></div>`,
+      'ship': `<div class="unit-symbol custom-icon"><svg width="24" height="16" viewBox="0 0 24 16"><path d="M2 10 L22 10 L18 16 L6 16 Z M6 10 L8 4 L16 4 L18 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`,
+      'plane': `<div class="unit-symbol custom-icon"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2 L14 10 L22 14 L22 16 L14 16 L12 22 L10 16 L2 16 L2 14 L10 10 Z" fill="#92c5e6" stroke="#000"/></svg></div>`
+    };
+    const symbolHTML = symbolMap[data.type] || '';
+    const badgeClass = data.badge.toLowerCase();
+    const borderHTML = data.border ? `<div class="unit-circle ${data.border}"></div>` : '';
+    
+    return `<div class="unit-wrapper" data-id="${data.id}">${borderHTML}<div class="unit-size">${data.size}</div><div class="unit-id">${data.unitId}</div>${symbolHTML}<div class="badge bg-${badgeClass} unit-badge">${data.badge}</div><div class="unit-percent">${data.percent}</div></div>`;
+  }
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * [ Component Managers ]
+ * ---------------------------------------------------------------------------
+ */
+class ModalManager {
+  constructor(appCore) {
+    this.appCore = appCore;
+    this.overlay = document.getElementById('add-unit-modal');
+    this.listEl = document.getElementById('modal-unit-list');
+    
+    document.getElementById('btn-open-modal').addEventListener('click', () => this.open(false));
+    
+    document.getElementById('btn-close-modal').addEventListener('click', () => this.close());
+    document.getElementById('btn-cancel-modal').addEventListener('click', () => this.close());
+    
+    document.getElementById('btn-apply-add').addEventListener('click', () => {
+      this.overlay.querySelectorAll('.unit-checkbox:checked').forEach(cb => {
+        const unitData = CONFIG.UNITS.find(u => u.id === cb.value);
+        if (unitData) this.appCore.createUnitMarker(unitData);
+      });
+      this.close();
+      this.appCore.calculatePercentages();
+    });
+  }
+
+  open(fromContextMenu = true) {
+    if (!fromContextMenu) {
+      this.appCore.canvasEl.dataset.clickX = '';
+      this.appCore.canvasEl.dataset.clickY = '';
+    }
+    this.listEl.innerHTML = CONFIG.UNITS.map(unit => `
+      <label class="list-item"><input type="checkbox" class="unit-checkbox" value="${unit.id}">
+      <div class="list-info"><div class="list-name">${unit.name}</div></div>
+      <div class="preview-wrap">${DOMUtils.generateUnitHTML(unit)}</div></label>
+    `).join('');
+    this.overlay.classList.add('active');
+  }
+
+  close() { this.overlay.classList.remove('active'); }
+}
+
+class TooltipManager {
+  constructor(appCore) {
+    this.appCore = appCore;
+    this.el = document.createElement('div');
+    this.el.className = 'unit-tooltip';
+    document.body.appendChild(this.el);
+
+    appCore.canvasEl.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+    appCore.canvasEl.addEventListener('mouseleave', () => this.hide());
+  }
+
+  handleMouseMove(e) {
+    if (this.appCore.state.isDragging || this.appCore.state.isResizing || this.appCore.contextMenu.isOpen) return this.hide();
+
+    const unitWrapper = e.target.closest('.unit-wrapper');
+    if (unitWrapper && this.appCore.canvasEl.contains(unitWrapper)) {
+      const unitData = CONFIG.UNITS.find(u => u.id === unitWrapper.getAttribute('data-id'));
+      if (unitData) this.show(unitData, e);
+    } else {
+      this.hide();
+    }
+  }
+
+  show(data, e) {
+    this.el.innerHTML = `<table><tr><th>부대명</th><td>${data.name}</td></tr><tr><th>부대코드</th><td>000XXXXXXX</td></tr><tr><th>전투력</th><td>${data.percent}</td></tr></table>`;
+    this.el.style.display = 'block';
+    
+    const canvasRect = this.appCore.canvasEl.getBoundingClientRect();
+    const tooltipRect = this.el.getBoundingClientRect();
+    
+    let posX = e.clientX + 15;
+    let posY = e.clientY + 15;
+
+    if (posX + tooltipRect.width > canvasRect.right) posX = e.clientX - tooltipRect.width - 15;
+    if (posY + tooltipRect.height > canvasRect.bottom) posY = e.clientY - tooltipRect.height - 15;
+
+    this.el.style.left = `${Math.max(canvasRect.left + 5, posX)}px`;
+    this.el.style.top = `${Math.max(canvasRect.top + 5, posY)}px`;
+  }
+
+  hide() { this.el.style.display = 'none'; }
+}
+
+class ContextMenuManager {
+  constructor(appCore) {
+    this.appCore = appCore;
+    this.menuEl = document.getElementById('custom-context-menu');
+    this.deleteBtn = document.getElementById('menu-delete-item');
+    this.isOpen = false;
+    this.targetElement = null;
+
+    this.buildBoxMenu();
+    this.initEvents();
+  }
+
+  buildBoxMenu() {
+    const subMenuBox = document.getElementById('sub-menu-box');
+    let html = '';
+    if (CONFIG.USE_ARMY_BOX) {
+      html += `<div class="context-menu-item" data-action="army-box">사령부박스</div>`;
+    }
+    html += `<div class="context-menu-item" data-action="corps-box">군단박스</div>`;
+    subMenuBox.innerHTML = html;
+  }
+
+  initEvents() {
+    this.appCore.canvasEl.addEventListener('contextmenu', (e) => this.open(e));
+    this.menuEl.addEventListener('mousedown', (e) => e.stopPropagation());
+    
+    this.menuEl.addEventListener('click', (e) => {
+      const actionItem = e.target.closest('.context-menu-item[data-action], #menu-add-unit, #menu-delete-item');
+      if (!actionItem || actionItem.classList.contains('disabled')) return;
+
+      const action = actionItem.dataset.action || actionItem.id;
+
+      if (action === 'menu-add-unit') this.appCore.modal.open(true);
+      else if (action === 'menu-delete-item') this.appCore.deleteElementTree(this.targetElement);
+      else if (CONFIG.MENU_TEMPLATES[action]) this.appCore.createElementFromMenu(action);
+
+      this.close();
+    });
+  }
+
+  open(e) {
+    if (e.target.tagName.toLowerCase() === 'input') return;
+
+    e.preventDefault();
+    this.appCore.tooltip.hide();
+    
+    const canvas = this.appCore.canvasEl;
+    const canvasRect = canvas.getBoundingClientRect();
+    
+    canvas.dataset.clickX = e.clientX - canvasRect.left + canvas.scrollLeft;
+    canvas.dataset.clickY = e.clientY - canvasRect.top + canvas.scrollTop;
+
+    this.targetElement = e.target.closest('.unit-wrapper, .army-box, .corps-box, .divider, .divider-horizontal');
+    this.deleteBtn.classList.toggle('disabled', !this.targetElement || !canvas.contains(this.targetElement));
+
+    this.menuEl.style.display = 'block';
+    this.isOpen = true;
+
+    const menuRect = this.menuEl.getBoundingClientRect();
+    let menuX = e.clientX;
+    let menuY = e.clientY;
+
+    if (menuX + menuRect.width + 130 > canvasRect.right) menuX = e.clientX - menuRect.width;
+    if (menuY + menuRect.height > canvasRect.bottom) menuY = e.clientY - menuRect.height;
+
+    this.menuEl.style.left = `${menuX}px`;
+    this.menuEl.style.top = `${menuY}px`;
+  }
+
+  close() {
+    this.menuEl.style.display = 'none';
+    this.isOpen = false;
+  }
+}
+
+class InteractionManager {
+  constructor(appCore) {
+    this.appCore = appCore;
+    this.state = { type: null, target: null, startX: 0, startY: 0, startW: 0, startH: 0, offsetX: 0, offsetY: 0, grabX: 0, grabY: 0 };
+    this.draggedChildren = [];
+
+    document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+    this.handleMouseMove = this.handleMouseMove.bind(this);
+    this.handleMouseUp = this.handleMouseUp.bind(this);
+  }
+
+  handleMouseDown(e) {
+    if (e.button === 0 && !e.target.closest('#custom-context-menu')) this.appCore.contextMenu.close();
+    if (e.button !== 0 || e.target.closest('.modal-overlay') || e.target.closest('.top-controls')) return;
+    if (e.target.tagName.toLowerCase() === 'input') return;
+
+    this.appCore.tooltip.hide();
+
+    const resizeBox = e.target.closest('.box-resize-handle');
+    const resizeLine = e.target.closest('.resize-handle');
+    
+    if (resizeBox || resizeLine) {
+      this.appCore.state.isResizing = true;
+      this.state.type = resizeBox ? 'resize-box' : 'resize-line';
+      this.state.target = (resizeBox || resizeLine).closest('.canvas-item');
+      this.state.activeHandle = resizeLine;
+      
+      const rect = this.state.target.getBoundingClientRect();
+      Object.assign(this.state, { startX: e.clientX, startY: e.clientY, startW: rect.width, startH: rect.height, startLeft: this.state.target.offsetLeft, startTop: this.state.target.offsetTop });
+      
+      if (this.state.type === 'resize-box') {
+        this.prepareChildrenForZIndex(this.state.target, false);
+      }
+      
+      this.state.target.style.zIndex = this.state.target.classList.contains('army-box') ? 45 : 95;
+      e.stopPropagation(); e.preventDefault();
+      
+      document.addEventListener('mousemove', this.handleMouseMove);
+      document.addEventListener('mouseup', this.handleMouseUp);
+      return;
+    }
+
+    const dragTarget = e.target.closest('.unit-wrapper, .army-box, .corps-box, .divider, .divider-horizontal');
+    if (!dragTarget) return;
+
+    e.preventDefault();
+    this.appCore.state.isDragging = true;
+    this.state.target = dragTarget;
+    
+    const isBox = dragTarget.classList.contains('army-box') || dragTarget.classList.contains('corps-box');
+    this.state.category = dragTarget.classList.contains('unit-wrapper') ? 'unit' : (isBox ? (dragTarget.classList.contains('army-box') ? 'army' : 'box') : 'line');
+    
+    CONFIG.Z_INDEX[this.state.category]++;
+    
+    // 💡 수정 항목 1: 고정(fixed) 처리를 하지 않고 canvas-area 내부에서의 상대 좌표(offsetLeft/Top) 활용
+    this.state.grabX = e.clientX - dragTarget.offsetLeft;
+    this.state.grabY = e.clientY - dragTarget.offsetTop;
+
+    if (isBox) this.prepareChildrenForZIndex(dragTarget, true);
+    else this.draggedChildren = [];
+
+    dragTarget.style.zIndex = dragTarget.classList.contains('army-box') ? 999990 : 999991;
+    
+    // 💡 수정 항목 2: document.body.appendChild(dragTarget) 제거 (캔버스 내부에 계속 유지)
+    dragTarget.dataset.initAbsLeft = dragTarget.offsetLeft;
+    dragTarget.dataset.initAbsTop = dragTarget.offsetTop;
+
+    document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mouseup', this.handleMouseUp);
+  }
+
+  prepareChildrenForZIndex(parent, savePosition = false) {
+    const children = this.appCore.getChildrenOfBox(parent);
+    this.draggedChildren = children.map(child => ({
+      element: child,
+      initialLeft: child.offsetLeft,
+      initialTop: child.offsetTop
+    }));
+    
+    this.draggedChildren.forEach(item => {
+      item.element.style.zIndex = item.element.classList.contains('corps-box') ? 999992 : 999995;
+      if(savePosition) item.element.style.pointerEvents = 'none';
+    });
+  }
+
+  handleMouseMove(e) {
+    if (this.appCore.state.isResizing) this.handleResizeMove(e);
+    else if (this.appCore.state.isDragging) this.handleDragMove(e);
+  }
+
+  handleResizeMove(e) {
+    const { target, startX, startY, startW, startH, startLeft, startTop, type, activeHandle } = this.state;
+    const MIN_SIZE = type === 'resize-box' ? 100 : 80;
+    
+    if (type === 'resize-box') {
+      target.style.width = `${Math.max(150, startW + (e.clientX - startX))}px`;
+      target.style.height = `${Math.max(100, startH + (e.clientY - startY))}px`;
+    } else if (target.classList.contains('divider')) {
+      if (activeHandle.classList.contains('bottom')) {
+        target.style.height = `${Math.max(MIN_SIZE, startH + (e.clientY - startY))}px`;
+      } else {
+        const deltaY = e.clientY - startY;
+        if (startH - deltaY >= MIN_SIZE) {
+          target.style.height = `${startH - deltaY}px`;
+          target.style.top = `${startTop + deltaY}px`;
+        }
+      }
+    } else {
+      if (activeHandle.classList.contains('right')) {
+        target.style.width = `${Math.max(MIN_SIZE, startW + (e.clientX - startX))}px`;
+      } else {
+        const deltaX = e.clientX - startX;
+        if (startW - deltaX >= MIN_SIZE) {
+          target.style.width = `${startW - deltaX}px`;
+          target.style.left = `${startLeft + deltaX}px`;
+        }
+      }
+    }
+    this.appCore.calculatePercentages();
+  }
+
+  handleDragMove(e) {
+    // 💡 수정 항목 3: 캔버스 내에서의 좌표 변화량을 계산하여 드래그 반영
+    const nextLeft = e.clientX - this.state.grabX;
+    const nextTop = e.clientY - this.state.grabY;
+    
+    if (this.draggedChildren.length > 0) {
+      const deltaX = nextLeft - parseFloat(this.state.target.dataset.initAbsLeft);
+      const deltaY = nextTop - parseFloat(this.state.target.dataset.initAbsTop);
+      
+      this.draggedChildren.forEach(item => {
+        item.element.style.left = `${item.initialLeft + deltaX}px`;
+        item.element.style.top = `${item.initialTop + deltaY}px`;
+      });
+    }
+    
+    this.state.target.style.left = `${nextLeft}px`;
+    this.state.target.style.top = `${nextTop}px`;
+  }
+
+  handleMouseUp() {
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    
+    if (this.appCore.state.isResizing) {
+      this.appCore.state.isResizing = false;
+      this.state.target.style.zIndex = CONFIG.Z_INDEX[this.state.target.classList.contains('army-box') ? 'army' : (this.state.target.classList.contains('corps-box') ? 'box' : 'line')];
+    } else if (this.appCore.state.isDragging) {
+      this.appCore.state.isDragging = false;
+      this.state.target.style.pointerEvents = 'auto';
+      
+      // 💡 수정 항목 4: 드래그 종료 시 불필요한 DOM 재배치(fixed -> absolute) 로직 제거 및 복구
+      this.state.target.style.zIndex = CONFIG.Z_INDEX[this.state.category];
+    }
+
+    if (this.draggedChildren.length > 0) {
+      this.draggedChildren.forEach(item => {
+        item.element.style.zIndex = CONFIG.Z_INDEX[item.element.classList.contains('corps-box') ? 'box' : 'unit'];
+        item.element.style.pointerEvents = 'auto';
+      });
+    }
+
+    this.draggedChildren = [];
+    this.state.target = null;
+    this.appCore.calculatePercentages();
+  }
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * [ App Core ] 메인 컨트롤러 및 저장소 오케스트레이션
+ * ---------------------------------------------------------------------------
+ */
+class SituationBoardApp {
+  // 1. 클래스 자체에 인스턴스를 저장할 static 변수를 선언합니다.
+  static instance = null;
+
+  constructor() {
+    // 2. 이미 생성된 인스턴스가 있다면, 새로 만들지 않고 기존 인스턴스를 반환합니다.
+    if (SituationBoardApp.instance) {
+      return SituationBoardApp.instance;
+    }
+
+    // 3. 처음 생성되는 경우라면, 이 객체를 static 변수에 저장합니다.
+    SituationBoardApp.instance = this;
+
+    this.canvasEl = document.getElementById('canvas-area');
+    this.state = { isDragging: false, isResizing: false };
+    
+    if (!CONFIG.USE_ARMY_BOX) {
+      const defaultArmy = document.getElementById('default-army-box');
+      if (defaultArmy) defaultArmy.remove();
+    }
+
+    this.modal = new ModalManager(this);
+    this.tooltip = new TooltipManager(this);
+    this.contextMenu = new ContextMenuManager(this);
+    this.interaction = new InteractionManager(this);
+    
+    this.selectedHistoryIndex = null;
+    this.initActionButtons();
+    
+    window.addEventListener('load', () => this.calculatePercentages());
+  }
+
+  initActionButtons() {
+    document.getElementById('btn-new-board').addEventListener('click', () => {
+      if (confirm('현재 작업 중인 상황도가 모두 초기화됩니다. 계속하시겠습니까?')) {
+        this.canvasEl.innerHTML = '';
+        this.calculatePercentages();
+      }
+    });
+
+    const saveModal = document.getElementById('save-title-modal');
+    document.getElementById('btn-save-board').addEventListener('click', () => {
+      document.getElementById('save-input-title').value = '';
+      saveModal.classList.add('active');
+    });
+    document.getElementById('btn-close-save-modal').addEventListener('click', () => saveModal.classList.remove('active'));
+    document.getElementById('btn-confirm-save').addEventListener('click', () => this.executeEncodeSave());
+
+    const historyModal = document.getElementById('history-list-modal');
+    document.getElementById('btn-history-board').addEventListener('click', () => {
+      this.renderHistoryTable();
+      historyModal.classList.add('active');
+    });
+    document.getElementById('btn-close-history-modal').addEventListener('click', () => historyModal.classList.remove('active'));
+    document.getElementById('btn-load-history').addEventListener('click', () => this.executeDecodeLoad());
+  }
+
+  executeEncodeSave() {
+    const titleInput = document.getElementById('save-input-title').value.trim();
+    if (!titleInput) return alert('저장할 제목을 입력해 주세요.');
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const saveTimeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+    this.canvasEl.querySelectorAll('input[type="text"]').forEach(input => {
+      input.setAttribute('value', input.value);
+    });
+
+    const rawHtml = this.canvasEl.innerHTML;
+    const encodedContent = btoa(encodeURIComponent(rawHtml));
+
+    const currentData = JSON.parse(localStorage.getItem('military_board_history') || '[]');
+    currentData.push({ title: titleInput, savetime: saveTimeStr, contents: encodedContent });
+    
+    localStorage.setItem('military_board_history', JSON.stringify(currentData));
+    
+    document.getElementById('save-title-modal').classList.remove('active');
+    alert('성공적으로 저장되었습니다.');
+  }
+
+  renderHistoryTable() {
+    const tableBody = document.getElementById('history-table-body');
+    const historyData = JSON.parse(localStorage.getItem('military_board_history') || '[]');
+    this.selectedHistoryIndex = null;
+
+    if (!historyData.length) {
+      tableBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#888; padding:20px;">저장된 이력 데이터가 없습니다.</td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = historyData.map((item, idx) => {
+      const t = item.savetime;
+      const formattedTime = `${t.substring(0,4)}-${t.substring(4,6)}-${t.substring(6,8)} ${t.substring(8,10)}:${t.substring(10,12)}:${t.substring(12,14)}`;
+      return `<tr data-index="${idx}"><td>${item.title}</td><td>${formattedTime}</td></tr>`;
+    }).join('');
+
+    tableBody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('click', (e) => {
+        tableBody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+        tr.classList.add('selected');
+        this.selectedHistoryIndex = parseInt(tr.dataset.index);
+      });
+    });
+  }
+
+  executeDecodeLoad() {
+    if (this.selectedHistoryIndex === null) return alert('불러올 이력 항목을 선택해 주세요.');
+    
+    const historyData = JSON.parse(localStorage.getItem('military_board_history') || '[]');
+    const targetItem = historyData[this.selectedHistoryIndex];
+
+    try {
+      const decodedHtml = decodeURIComponent(atob(targetItem.contents));
+      this.canvasEl.innerHTML = decodedHtml;
+
+      document.getElementById('history-list-modal').classList.remove('active');
+      this.calculatePercentages();
+      alert(`[${targetItem.title}] 데이터를 정상적으로 불러왔습니다.`);
+    } catch (error) {
+      alert('데이터 복원 처리 중 오류가 발생했습니다.');
+      console.error(error);
+    }
+  }
+
+  // 💡 수정됨: input 태그에서 span(.percent-text) 태그 갱신으로 타겟팅 변경
+  calculatePercentages() {
+    const updatePercent = (parentBox, childrenSelector) => {
+      const parentRect = parentBox.getBoundingClientRect();
+      const children = DOMUtils.getContainedChildren(parentRect, this.canvasEl.querySelectorAll(childrenSelector));
+      
+      const total = children.reduce((sum, child) => {
+        const targetEl = child.querySelector('.percent-text, .unit-percent');
+        const val = parseFloat(targetEl.innerText.replace('%', '') || targetEl.value);
+        return sum + (isNaN(val) ? 0 : val);
+      }, 0);
+      
+      const textEl = parentBox.querySelector('.percent-text');
+      if (textEl) {
+        textEl.innerText = children.length ? Math.floor((total / children.length) * 10) / 10 : 0;
+      }
+    };
+
+    this.canvasEl.querySelectorAll('.corps-box').forEach(corps => updatePercent(corps, '.unit-wrapper'));
+    
+    if (CONFIG.USE_ARMY_BOX) {
+      this.canvasEl.querySelectorAll('.army-box').forEach(army => updatePercent(army, '.corps-box'));
+    }
+  }
+
+  getChildrenOfBox(parentBox) {
+    const rect = parentBox.getBoundingClientRect();
+    if (parentBox.classList.contains('army-box') && CONFIG.USE_ARMY_BOX) {
+      const corps = DOMUtils.getContainedChildren(rect, this.canvasEl.querySelectorAll('.corps-box'));
+      const units = DOMUtils.getContainedChildren(rect, this.canvasEl.querySelectorAll('.unit-wrapper'));
+      return [...corps, ...units];
+    }
+    if (parentBox.classList.contains('corps-box')) {
+      return DOMUtils.getContainedChildren(rect, this.canvasEl.querySelectorAll('.unit-wrapper'));
+    }
+    return [];
+  }
+
+  createUnitMarker(unitData) {
+    const clickX = parseFloat(this.canvasEl.dataset.clickX) || 50;
+    const clickY = parseFloat(this.canvasEl.dataset.clickY) || 50;
+    
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = DOMUtils.generateUnitHTML(unitData).trim();
+    const unitNode = wrapper.firstChild;
+    
+    unitNode.classList.add('canvas-item');
+    Object.assign(unitNode.style, { position: 'absolute', left: `${clickX}px`, top: `${clickY}px`, zIndex: ++CONFIG.Z_INDEX.unit });
+    
+    this.canvasEl.appendChild(unitNode);
+  }
+
+  createElementFromMenu(type) {
+    if (type === 'army-box' && !CONFIG.USE_ARMY_BOX) return;
+
+    const template = CONFIG.MENU_TEMPLATES[type];
+    const category = type.includes('army') ? 'army' : (type.includes('corps') ? 'box' : 'line');
+    
+    const newEl = document.createElement('div');
+    newEl.className = `canvas-item ${type}`;
+    Object.assign(newEl.style, {
+      position: 'absolute',
+      left: `${parseFloat(this.canvasEl.dataset.clickX) || 50}px`,
+      top: `${parseFloat(this.canvasEl.dataset.clickY) || 50}px`,
+      width: `${template.width}px`,
+      height: `${template.height}px`,
+      zIndex: ++CONFIG.Z_INDEX[category]
+    });
+    newEl.innerHTML = template.html;
+    
+    this.canvasEl.appendChild(newEl);
+    this.calculatePercentages();
+  }
+
+  deleteElementTree(targetElement) {
+    if (targetElement.classList.contains('army-box') || targetElement.classList.contains('corps-box')) {
+      this.getChildrenOfBox(targetElement).forEach(child => child.remove());
+    }
+    targetElement.remove();
+    this.calculatePercentages();
+  }
+}
+
+const app1 = new SituationBoardApp();
+const app2 = new SituationBoardApp();
+const app3 = new SituationBoardApp();
+</script>
+
+</body>
+</html>
